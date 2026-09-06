@@ -1,16 +1,17 @@
 import * as T from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { assetUrl } from './asset-url.js';
 let pending;
 export function loadParkAssets() {
   pending ??= Promise.all([
     ...['furnace-v2', 'cooling-v2', 'big-air-v2', 'mint-v4', 'peach-v4'].map(
-      (name) => new GLTFLoader().loadAsync(`/models/${name}.glb`),
+      (name) => new GLTFLoader().loadAsync(assetUrl(`/models/${name}.glb`)),
     ),
-    new T.TextureLoader().loadAsync('/art/pixel-skyline.png'),
+    new T.TextureLoader().loadAsync(assetUrl('/art/pixel-skyline.png')),
     Promise.all(
       ['furnace', 'cooling', 'ramp'].map((name) =>
-        fetch(`/mosaics/${name}-floor-v4.json`).then((response) => {
+        fetch(assetUrl(`/mosaics/${name}-floor-v4.json`)).then((response) => {
           if (!response.ok) throw Error('地面像素图加载失败');
           return response.json();
         }),

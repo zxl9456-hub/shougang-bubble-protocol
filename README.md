@@ -49,6 +49,18 @@ pnpm build
 
 静态成品位于 `dist/client`。构建使用 Vinext / Vite、React 19、Three.js；界面复用 Shadcn / Base UI。
 
+## GitHub Pages
+
+GitHub Pages 使用 `github-pages/main.tsx` 直接加载同一个 `Game` 组件，无需服务器。模型、像素图、音乐、CSS 和脚本随静态站点一起发布。
+
+```sh
+NEXT_PUBLIC_BASE_PATH=/shougang-bubble-protocol pnpm build:pages
+```
+
+GitHub 静态成品位于 `dist/github-pages`。仓库网站使用 `/仓库名` 作为路径前缀；自定义域名或 `用户名.github.io` 仓库可省略 `NEXT_PUBLIC_BASE_PATH`。
+
+`.github/workflows/pages.yml` 会在推送到 `main` 后运行测试、类型检查、构建及 Pages 发布。在仓库 Settings → Pages 中选择 GitHub Actions 作为发布来源。原有 `pnpm build` 和 Sites 配置继续用于原网址。
+
 ## 结构
 
 - `components/game/engine.js`：关卡、碰撞、爆炸、补给、AI 与结算。

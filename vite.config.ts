@@ -45,6 +45,7 @@ export default defineConfig(async () => {
   const { cloudflare } = await import('@cloudflare/vite-plugin');
 
   return {
+    define: { 'process.env.NEXT_PUBLIC_BASE_PATH': JSON.stringify('') },
     resolve: { dedupe: ['react', 'react-dom'] },
     optimizeDeps: {
       include: [

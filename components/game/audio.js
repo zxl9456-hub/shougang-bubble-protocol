@@ -1,3 +1,5 @@
+import { assetUrl } from './asset-url.js';
+
 export class ParkAudio {
   constructor(onError = (_message) => {}) {
     this.context = null;
@@ -12,7 +14,7 @@ export class ParkAudio {
   }
   ensureAudio() {
     if (!this.music) {
-      this.music = new Audio('/audio/neon-factory-loop.mp3');
+      this.music = new Audio(assetUrl('/audio/neon-factory-loop.mp3'));
       this.music.loop = true;
       this.music.preload = 'auto';
       this.music.volume = 0.34;
