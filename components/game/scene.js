@@ -1,5 +1,7 @@
 import * as T from 'three';
 import { buildDistrict } from './environment.js';
+import { ParkAtmosphere } from './atmosphere.js';
+import { buildGroundMosaic, updateGroundMosaic } from './mosaic.js';
 import { animatedRunner, playAction } from './assets.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
@@ -29,6 +31,7 @@ export class ParkScene {
     this.gameCamera = new T.OrthographicCamera(-15, 15, 12, -12, 0.1, 180);
     this.gameCamera.position.set(5, 21, 27);
     this.gameCamera.lookAt(0, 0.7, 1.7);
+    this.revealCamera = this.gameCamera.clone();
     this.camera = this.lobbyCamera;
     this.scene.add(new T.HemisphereLight('#8298ff', '#181024', 1.6));
     const sun = new T.DirectionalLight('#73c8ff', 2.1);
@@ -51,12 +54,7 @@ export class ParkScene {
     this.composer = new EffectComposer(this.renderer);
     this.renderPass = new RenderPass(this.scene, this.camera);
     this.composer.addPass(this.renderPass);
-    this.bloom = new UnrealBloomPass(
-      new T.Vector2(1024, 768),
-      0.55,
-      0.45,
-      1.15,
-    );
+    this.bloom = new UnrealBloomPass(new T.Vector2(1024, 768), 0.7, 0.5, 1.15);
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
     this.models = new Map();
@@ -75,6 +73,12 @@ export class ParkScene {
     this.landmarks = built.landmarks;
     this.reflector = built.reflector;
     this.floorTexture = built.floorTexture;
+    this.atmosphere = new ParkAtmosphere(this.scene);
+    this.mosaics = this.assets.mosaics.map((data, i) => {
+      const m = buildGroundMosaic(data, i);
+      this.scene.add(m);
+      return m;
+    });
     this.showcase = new T.Group();
     const scout = animatedRunner(this.assets.runner, '#39d8f5'),
       forge = animatedRunner(this.assets.forge, '#ff7753');
@@ -128,6 +132,17 @@ export class ParkScene {
     this.gameCamera.top = span;
     this.gameCamera.bottom = -span;
     this.gameCamera.updateProjectionMatrix();
+    const revealSpan = a < 1 ? 8.8 : 8.2;
+    Object.assign(this.revealCamera, {
+      left: -revealSpan * a,
+      right: revealSpan * a,
+      top: revealSpan,
+      bottom: -revealSpan,
+    });
+    const target = new T.Vector3(a < 1 ? 0 : 2, 0, a < 1 ? 5.5 : 3);
+    this.revealCamera.position.copy(target).add(new T.Vector3(0, 24, 11));
+    this.revealCamera.lookAt(target);
+    this.revealCamera.updateProjectionMatrix();
     this.lobbyCamera.aspect = a;
     this.lobbyCamera.fov = a < 1 ? 60 : 48;
     this.lobbyCamera.updateProjectionMatrix();
@@ -145,10 +160,20 @@ export class ParkScene {
       l.el.classList.toggle('activated', !!flags[l.index]),
     );
   }
+  configureLevel(level) {
+    this.currentLevel = level;
+    this.atmosphere.setLevel(level);
+  }
   setPlaying(v) {
     this.reveal = null;
+    this.mosaics.forEach((m) => {
+      m.visible = false;
+      m.userData.pixels.count = 0;
+    });
+    this.tiles.forEach((m) => (m.visible = true));
+    this.atmosphere.reset();
     if (this.unlocked) this.setUnlocked(this.unlocked);
-    this.bloom.strength = 0.55;
+    this.bloom.strength = 0.7;
     this.showcase.visible = !v;
     this.lobbyCamera.position.set(16, 10.5, 24);
     this.lobbyCamera.lookAt(-0.8, 3.1, -5);
@@ -162,6 +187,7 @@ export class ParkScene {
     return new T.Vector3(x - 6, y, z - 2);
   }
   sync(state) {
+    if (this.reveal && state.status === 'finished') return;
     const wanted = new Set();
     for (let z = 0; z < state.height; z++)
       for (let x = 0; x < state.width; x++) {
@@ -300,6 +326,8 @@ export class ParkScene {
     return g;
   }
   handleEvent(event) {
+    if (event.type === 'explode' && !this.reduced)
+      this.atmosphere.shock(this.position(event.x, event.z, 0.15));
     if (event.type === 'destroy')
       this.burst(this.position(event.x, event.z, 0.5), 20, '#ffb85b');
     const m = this.models.get(`player-${event.player}`);
@@ -317,13 +345,15 @@ export class ParkScene {
     const landmark = this.landmarks[index];
     if (!landmark) return;
     this.reveal = { index, time: 0 };
-    this.camera = this.lobbyCamera;
+    this.camera = this.revealCamera;
     this.renderPass.camera = this.camera;
-    const center = landmark.position.clone();
-    this.lobbyCamera.position.copy(center).add(new T.Vector3(11, 9, 17));
-    this.lobbyCamera.lookAt(center.clone().add(new T.Vector3(0, 3, 0)));
-    this.burst(center.clone().add(new T.Vector3(0, 4, 0)), 75, '#ffe395');
-    this.bloom.strength = 0.85;
+    this.mosaics.forEach((m, i) => (m.visible = i === index));
+    this.tiles.forEach((m) => (m.visible = false));
+    this.models.forEach((m) => (m.visible = false));
+    this.labels.forEach((l) => (l.el.style.opacity = '0'));
+    this.burst(new T.Vector3(-5, 0.3, -1), 30, '#ffe395');
+    this.burst(new T.Vector3(5, 0.3, 7), 30, '#71eaff');
+    this.bloom.strength = 0.8;
   }
   burst(pos, n, color) {
     if (this.reduced) return;
@@ -348,11 +378,17 @@ export class ParkScene {
   update(dt) {
     this.elapsed += dt;
     const t = this.elapsed;
+    this.atmosphere.update(dt, this.reduced);
     if (this.showcase.visible)
       for (const model of this.showcase.children)
         model.userData.mixer.update(dt);
     if (this.reveal) {
       this.reveal.time += dt;
+      updateGroundMosaic(
+        this.mosaics[this.reveal.index],
+        this.reveal.time,
+        this.reduced,
+      );
       const pulse =
         Math.max(0, 1 - this.reveal.time / 2.1) *
         (1 + Math.sin(this.reveal.time * 12) * 0.3);
@@ -360,9 +396,13 @@ export class ParkScene {
         if (o.isMesh)
           o.material.emissiveIntensity = o.userData.glow * (1.8 + pulse * 2);
       });
-      this.bloom.strength = 0.55 + pulse * 0.3;
+      this.bloom.strength = 0.7 + pulse * 0.16;
     }
     for (const [key, m] of this.models) {
+      if (this.reveal) {
+        m.visible = false;
+        continue;
+      }
       const e = m.userData.entity,
         target = this.position(e.x, e.z, 0.18);
       if (e.kind === 'player') {
@@ -412,6 +452,7 @@ export class ParkScene {
   }
   dispose() {
     this.observer.disconnect();
+    this.atmosphere.dispose();
     this.labels.forEach((l) => l.el.remove());
     this.scene.traverse((o) => {
       if (o.geometry) o.geometry.dispose();

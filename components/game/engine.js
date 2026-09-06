@@ -5,22 +5,52 @@ export const LEVELS = [
     name: '炉火重燃',
     landmark: '三高炉',
     subtitle: '清空高炉前的彩色方块，重新点亮炉火。',
+    difficulty: '初阶',
+    blocks: 34,
     enemies: 1,
-    time: 240,
+    time: 260,
+    enemySpeed: 0.29,
+    enemyRange: 2,
+    enemyCapacity: 1,
+    enemyHP: 1,
+    enemyFuse: 2.4,
+    bombGap: 3.4,
+    supplyChance: 0.36,
+    color: '#ffb357',
   },
   {
     name: '冷却回路',
     landmark: '冷却塔',
     subtitle: '打通冷却回路，让塔身重新亮起。',
+    difficulty: '进阶',
+    blocks: 42,
     enemies: 2,
     time: 240,
+    enemySpeed: 0.23,
+    enemyRange: 3,
+    enemyCapacity: 2,
+    enemyHP: 2,
+    enemyFuse: 2.1,
+    bombGap: 2.6,
+    supplyChance: 0.3,
+    color: '#4cecff',
   },
   {
     name: '飞向未来',
     landmark: '雪飞天',
     subtitle: '炸开最后一片方块，让大跳台重新亮起。',
+    difficulty: '挑战',
+    blocks: 50,
     enemies: 3,
-    time: 270,
+    time: 220,
+    enemySpeed: 0.18,
+    enemyRange: 4,
+    enemyCapacity: 3,
+    enemyHP: 2,
+    enemyFuse: 1.85,
+    bombGap: 1.9,
+    supplyChance: 0.24,
+    color: '#ff66d5',
   },
 ];
 const DIRS = [
@@ -35,6 +65,7 @@ export class BubbleGame {
     if (!['solo', 'duel'].includes(mode)) throw Error('Invalid mode');
     this.mode = mode;
     this.level = Math.max(0, Math.min(2, level));
+    this.rules = LEVELS[this.level];
     this.width = WIDTH;
     this.height = HEIGHT;
     this.seed = seed >>> 0;
@@ -59,9 +90,7 @@ export class BubbleGame {
         z === HEIGHT - 1 ||
         (x % 2 === 0 && z % 2 === 0)
           ? 1
-          : this.random() < 0.48
-            ? 2
-            : 0,
+          : 2,
       ),
     );
     const spawns = [
@@ -87,6 +116,18 @@ export class BubbleGame {
       ])
         if (this.grid[z + dz][x + dx] === 2) this.grid[z + dz][x + dx] = 0;
     }
+    const candidates = [];
+    for (let z = 0; z < HEIGHT; z++)
+      for (let x = 0; x < WIDTH; x++)
+        if (this.grid[z][x] === 2) candidates.push([x, z]);
+    for (let i = candidates.length - 1; i > 0; i--) {
+      const j = Math.floor(this.random() * (i + 1));
+      [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+    }
+    const blockCount = mode === 'solo' ? this.rules.blocks : 38;
+    candidates.forEach(([x, z], i) => {
+      this.grid[z][x] = i < blockCount ? 2 : 0;
+    });
     this.initialBlocks = this.remainingBlocks;
     this.players = spawns
       .slice(0, mode === 'duel' ? 2 : LEVELS[this.level].enemies + 1)
@@ -97,13 +138,14 @@ export class BubbleGame {
         dx: 0,
         dz: 1,
         alive: true,
-        hp: mode === 'solo' && i === 0 ? 3 : 1,
+        hp: mode === 'solo' ? (i === 0 ? 3 : this.rules.enemyHP) : 1,
         invincible: 0,
         cooldown: 0,
         ai: mode === 'solo' && i > 0,
-        think: 0,
-        capacity: 2,
-        range: 2,
+        think: mode === 'solo' && i > 0 ? 1.5 : 0,
+        bombCooldown: 0,
+        capacity: mode === 'solo' && i > 0 ? this.rules.enemyCapacity : 2,
+        range: mode === 'solo' && i > 0 ? this.rules.enemyRange : 2,
         speed: 0.145,
         color:
           i === 0
@@ -168,7 +210,7 @@ export class BubbleGame {
     p.x += dx;
     p.z += dz;
     p.cooldown = p.speed;
-    if (p.ai) p.cooldown = 0.26 - this.level * 0.025;
+    if (p.ai) p.cooldown = this.rules.enemySpeed;
     this.collect(p);
     this.revision++;
     return true;
@@ -191,6 +233,7 @@ export class BubbleGame {
       this.paused ||
       !p?.alive ||
       this.bombAt(p.x, p.z) ||
+      (p.ai && p.bombCooldown > 0) ||
       this.bombs.filter((b) => b.owner === id).length >= p.capacity
     )
       return false;
@@ -198,11 +241,12 @@ export class BubbleGame {
       id: this.id(),
       x: p.x,
       z: p.z,
-      fuse: 2.2,
+      fuse: p.ai ? this.rules.enemyFuse : 2.2,
       range: p.range,
       owner: id,
       color: p.color,
     });
+    if (p.ai) p.bombCooldown = this.rules.bombGap;
     this.emit('bomb', { player: id });
     return true;
   }
@@ -277,7 +321,12 @@ export class BubbleGame {
         new Set(),
         hypothetical,
       );
-      if (escape && escape.length <= 5 && this.placeBomb(p.id)) return;
+      if (
+        escape &&
+        escape.length * this.rules.enemySpeed < this.rules.enemyFuse - 0.35 &&
+        this.placeBomb(p.id)
+      )
+        return;
     }
     const path = this.route(
       p,
@@ -314,7 +363,10 @@ export class BubbleGame {
           this.destroyed++;
           if (b.owner === 1) this.score += 10;
           this.emit('destroy', { x, z, owner: b.owner });
-          if (this.random() < 0.32) {
+          if (
+            this.random() <
+            (this.mode === 'solo' ? this.rules.supplyChance : 0.32)
+          ) {
             const types = ['range', 'capacity', 'speed', 'heart'];
             this.pickups.push({
               id: this.id(),
@@ -381,6 +433,7 @@ export class BubbleGame {
     this.time = Math.max(0, this.time - dt);
     this.players.forEach((p) => {
       p.cooldown = Math.max(0, p.cooldown - dt);
+      p.bombCooldown = Math.max(0, p.bombCooldown - dt);
       p.invincible = Math.max(0, p.invincible - dt);
     });
     this.blasts.forEach((b) => (b.life -= dt));

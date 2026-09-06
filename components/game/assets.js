@@ -4,14 +4,22 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 let pending;
 export function loadParkAssets() {
   pending ??= Promise.all([
-    ...['furnace-v2', 'cooling-v2', 'big-air-v2', 'scout-v3', 'forge-v3'].map(
+    ...['furnace-v2', 'cooling-v2', 'big-air-v2', 'mint-v4', 'peach-v4'].map(
       (name) => new GLTFLoader().loadAsync(`/models/${name}.glb`),
     ),
     new T.TextureLoader().loadAsync('/art/pixel-skyline.png'),
+    Promise.all(
+      ['furnace', 'cooling', 'ramp'].map((name) =>
+        fetch(`/mosaics/${name}-floor-v4.json`).then((response) => {
+          if (!response.ok) throw Error('地面像素图加载失败');
+          return response.json();
+        }),
+      ),
+    ),
   ])
-    .then(([furnace, cooling, ramp, runner, forge, sky]) => {
+    .then(([furnace, cooling, ramp, runner, forge, sky, mosaics]) => {
       sky.colorSpace = T.SRGBColorSpace;
-      return { furnace, cooling, ramp, runner, forge, sky };
+      return { furnace, cooling, ramp, runner, forge, sky, mosaics };
     })
     .catch((e) => {
       pending = null;
@@ -82,7 +90,7 @@ function batchRig(asset) {
 export function animatedRunner(asset, color) {
   const outer = new T.Group(),
     model = batchRig(asset).clone(true);
-  model.scale.setScalar(0.76);
+  model.scale.setScalar(0.86);
   outer.add(model);
   model.traverse((o) => {
     if (o.isMesh) {

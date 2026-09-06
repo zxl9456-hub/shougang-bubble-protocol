@@ -72,7 +72,7 @@ export function buildDistrict(scene, assets) {
     roughness: 0.26,
     metalness: 0.48,
     transparent: true,
-    opacity: 0.94,
+    opacity: 0.81,
   });
   const reflector = new Reflector(new T.PlaneGeometry(90, 70), {
     clipBias: 0.005,

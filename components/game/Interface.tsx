@@ -95,15 +95,16 @@ export function Guide({
           <p>
             <Droplets />
             <span>
-              <b>放下泡泡，记得转弯</b>2.2
-              秒后十字爆炸。钢柱阻挡冲击，爆炸摧毁沿途的第一个彩色方块，也会引爆其他泡泡。圆形钢柱无法炸毁。你也会被自己的泡泡击中。
+              <b>放下泡泡，记得转弯</b>你的泡泡在 2.2
+              秒后十字爆炸。钢柱阻挡冲击，爆炸摧毁沿途的第一个彩色方块，也会引爆其他泡泡。圆形钢柱无法炸毁。你也会被自己的泡泡击中，后两关对手的泡泡引爆更快。
             </span>
           </p>
           <p>
             <Diamond />
             <span>
               <b>清空方块，解锁地标</b>
-              炸掉本关全部彩色方块，即可解锁对应的三高炉、冷却塔或大跳台并过关。剩余数量会实时显示，最后一块炸毁后自动解锁。
+              炸掉本关全部彩色方块，即可解锁对应的三高炉、冷却塔或大跳台并过关。剩余数量实时显示，清空后地面会逐行亮起对应地标的像素图案。三关方块数为
+              34、42、50 块，对手的数量、速度、射程和放泡泡频率逐级提升。
             </span>
           </p>
           <p>
@@ -209,7 +210,7 @@ export function GameHUD({
         <div className="player-hud">
           <span className="player-token">P1</span>
           <div>
-            <b>青岚 / 侦察型</b>
+            <b>薄荷 / 泡泡精灵</b>
             <div className="hearts">
               {[0, 1, 2].slice(0, state.mode === 'solo' ? 3 : 1).map((i) => (
                 <Heart
@@ -225,7 +226,7 @@ export function GameHUD({
         <div className={'timer ' + (seconds < 30 ? 'urgent' : '')}>
           <span>
             {state.mode === 'solo'
-              ? `区域 0${state.level + 1} / ${LEVELS[state.level].name}`
+              ? `区域 0${state.level + 1} · ${LEVELS[state.level].difficulty} / ${LEVELS[state.level].name}`
               : '本地双人 / 泡泡对决'}
           </span>
           <b>
@@ -238,7 +239,7 @@ export function GameHUD({
           {state.mode === 'duel' ? (
             <>
               <div>
-                <b>赤焰 / 重装型</b>
+                <b>蜜桃 / 泡泡精灵</b>
                 <div className="hearts">
                   <Heart size={15} fill={q.alive ? 'currentColor' : 'none'} />
                 </div>
@@ -247,7 +248,7 @@ export function GameHUD({
             </>
           ) : (
             <div>
-              <span>巡逻机器人</span>
+              <span>巡逻精灵</span>
               <b>
                 {state.players.filter((p: any) => p.ai && p.alive).length}
                 <small> / {state.players.length - 1}</small>
@@ -327,9 +328,9 @@ export function Result({
       : r === 'won'
         ? '区域探索完成'
         : r === 'p1'
-          ? '青岚玩家获胜'
+          ? '薄荷玩家获胜'
           : r === 'p2'
-            ? '赤焰玩家获胜'
+            ? '蜜桃玩家获胜'
             : r === 'draw'
               ? '势均力敌'
               : r === 'timeout'
@@ -337,7 +338,12 @@ export function Result({
                 : '暂时迷失在钢城';
   return (
     <Dialog open={true}>
-      <DialogContent className="result-panel" showCloseButton={false}>
+      <DialogContent
+        className={
+          'result-panel ' + (state.landmarkUnlocked ? 'landmark-result' : '')
+        }
+        showCloseButton={false}
+      >
         <div className={'result-symbol ' + (win ? 'win' : '')}>
           {win ? <Trophy size={35} /> : <Droplets size={35} />}
         </div>
@@ -347,9 +353,9 @@ export function Result({
         <DialogTitle className="result-title">{title}</DialogTitle>
         <DialogDescription className="result-description">
           {r === 'won'
-            ? `${LEVELS[state.level].landmark}已点亮，继续深入园区。`
+            ? `${LEVELS[state.level].landmark}已在地面化作像素图案。继续挑战下一关。`
             : r === 'complete'
-              ? '三处地标的城市记忆，已全部唤醒。'
+              ? '三处像素地标已全部解锁，脚下是雪飞天的城市记忆。'
               : r === 'draw'
                 ? '本局没有唯一胜者，再来一场吧。'
                 : win

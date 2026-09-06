@@ -95,6 +95,7 @@ export default function Game() {
       setState(game.snapshot());
       setMode(chosenMode);
       setLevel(chosenLevel);
+      park.current.configureLevel(chosenMode === 'solo' ? chosenLevel : 0);
       park.current.setPlaying(true);
       park.current.sync(game.snapshot());
       sound.current?.setPaused(false);
@@ -114,6 +115,7 @@ export default function Game() {
     setToast('');
     const demo = new BubbleGame({ mode: 'duel', seed: 4206 });
     engine.current = demo;
+    park.current?.configureLevel(progressRef.current.stage);
     park.current?.setPlaying(false);
     park.current?.sync(demo.snapshot());
     sound.current?.setPaused(false);
@@ -158,6 +160,7 @@ export default function Game() {
             '(prefers-reduced-motion: reduce)',
           ).matches;
           park.current.setUnlocked?.(progressRef.current.unlocked);
+          park.current.configureLevel(progressRef.current.stage);
           engine.current = new BubbleGame({ mode: 'duel', seed: 4206 });
           park.current.sync(engine.current.snapshot());
           setReady(true);
@@ -204,9 +207,7 @@ export default function Game() {
                 p.unlocked[game.level] = true;
                 saveProgress(p);
                 park.current.celebrateLandmark(event.level);
-                setToast(
-                  `全部方块已清空 · ${LEVELS[game.level].landmark}已解锁`,
-                );
+                setToast(`全部方块已清空 · 地面像素图已点亮`);
                 clearTimeout(toastTimer);
                 toastTimer = setTimeout(() => setToast(''), 3500);
               }
@@ -383,7 +384,7 @@ export default function Game() {
     if (state?.status !== 'finished') return;
     const timer = setTimeout(
       () => setResultVisible(true),
-      state.landmarkUnlocked ? 2100 : 500,
+      state.landmarkUnlocked ? 2400 : 500,
     );
     return () => clearTimeout(timer);
   }, [state?.status, state?.result]);
@@ -500,7 +501,10 @@ export default function Game() {
                     <button
                       key={l.name}
                       className={level === i ? 'selected' : ''}
-                      onClick={() => setLevel(i)}
+                      onClick={() => {
+                        setLevel(i);
+                        park.current?.configureLevel(i);
+                      }}
                     >
                       0{i + 1} {l.name}
                     </button>
@@ -523,7 +527,7 @@ export default function Game() {
               </button>
               <p className="mode-description">
                 {mode === 'solo'
-                  ? '炸完所有彩色方块 · 逐关解锁 3 处地标'
+                  ? `${LEVELS[level].difficulty} · ${LEVELS[level].blocks} 块方块 · ${LEVELS[level].enemies} 位对手`
                   : '同一块键盘 · 两位玩家 · 一场泡泡对决'}
               </p>
               <div className="keyboard-hint">
@@ -549,7 +553,9 @@ export default function Game() {
         ) : (
           state && (
             <>
-              <GameHUD state={state} onPause={() => pause(true)} />
+              {!state.landmarkUnlocked && (
+                <GameHUD state={state} onPause={() => pause(true)} />
+              )}
               {countdown > 0 && !paused && (
                 <div className="countdown">
                   <b>{countdown}</b>
@@ -573,9 +579,9 @@ export default function Game() {
               )}{' '}
               {state.landmarkUnlocked && !resultVisible && (
                 <div className="unlock-celebration">
-                  <span>ALL BLOCKS CLEARED</span>
+                  <span>PIXEL MEMORY UNLOCKED</span>
                   <b>{LEVELS[state.level].landmark}已解锁</b>
-                  <small>园区重新亮起 · 城市记忆 +1</small>
+                  <small>地面像素地标已显现</small>
                 </div>
               )}
               {state.status === 'finished' && resultVisible && (

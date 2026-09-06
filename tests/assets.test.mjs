@@ -15,8 +15,8 @@ for (const [key, file] of [
   ['furnace', 'furnace-v2'],
   ['cooling', 'cooling-v2'],
   ['ramp', 'big-air-v2'],
-  ['runner', 'scout-v3'],
-  ['forge', 'forge-v3'],
+  ['runner', 'mint-v4'],
+  ['forge', 'peach-v4'],
 ]) {
   const bytes = await fs.readFile(
     new URL(`../public/models/${file}.glb`, import.meta.url),
@@ -59,7 +59,7 @@ for (const key of ['runner', 'forge']) {
     const raw = assets[key].scene;
     raw.updateMatrixWorld(true);
     assert.ok(
-      node(raw, 'Visor_glass').getWorldPosition(new T.Vector3()).z >
+      node(raw, 'Face_mask').getWorldPosition(new T.Vector3()).z >
         node(raw, 'Helmet').getWorldPosition(new T.Vector3()).z,
     );
     assert.ok(node(runner, 'Helmet').getWorldPosition(new T.Vector3()).y > 0.7);
@@ -68,8 +68,9 @@ for (const key of ['runner', 'forge']) {
     raw.traverse((o) => (before += o.isMesh ? 1 : 0));
     runner.traverse((o) => (after += o.isMesh ? 1 : 0));
     assert.ok(after < before);
+    assert.ok(before < 45, 'cute silhouettes should remain simple');
     const expected = new T.Box3().setFromObject(raw);
-    assert.ok(bounds.max.distanceTo(expected.max.multiplyScalar(0.76)) < 0.001);
+    assert.ok(bounds.max.distanceTo(expected.max.multiplyScalar(0.86)) < 0.001);
   });
   test(`${key} four animation clips play independently and return to Idle`, () => {
     const a = animatedRunner(assets[key], '#18d8ff'),
