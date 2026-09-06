@@ -232,17 +232,26 @@ export function runner(color = '#61ffda') {
   g.userData = { legs, arms };
   return g;
 }
-export function crate(core = false) {
+export function crate(warm = false) {
   const g = new T.Group();
-  box(g, 0, 0.38, 0, 0.78, 0.72, 0.78, core ? M.steel : M.rust);
+  box(
+    g,
+    0,
+    0.38,
+    0,
+    0.78,
+    0.72,
+    0.78,
+    warm ? material('#bc6c3a') : material('#426c91'),
+  );
   box(g, 0, 0.77, 0, 0.81, 0.07, 0.81, M.dark);
   for (const x of [-0.32, 0.32])
     for (const z of [-0.32, 0.32]) box(g, x, 0.4, z, 0.07, 0.74, 0.07, M.steel);
   for (const z of [-0.4, 0.4]) {
-    box(g, 0, 0.43, z, 0.63, 0.09, 0.015, core ? M.amber : M.steel);
-    const b = box(g, 0, 0.43, z, 0.07, 0.62, 0.02, core ? M.amber : M.concrete);
+    box(g, 0, 0.43, z, 0.63, 0.09, 0.015, warm ? M.amber : M.cyan);
+    const b = box(g, 0, 0.43, z, 0.07, 0.62, 0.02, warm ? M.amber : M.cyan);
     b.rotation.z = Math.PI / 4;
   }
-  if (core) box(g, 0, 0.83, 0, 0.22, 0.08, 0.22, M.amber);
+  box(g, 0, 0.83, 0, 0.22, 0.08, 0.22, M.amber);
   return merge(g);
 }

@@ -96,14 +96,14 @@ export function Guide({
             <Droplets />
             <span>
               <b>放下泡泡，记得转弯</b>2.2
-              秒后十字爆炸。钢柱阻挡冲击，爆炸摧毁沿途的第一个能量箱，也会引爆其他泡泡。你也会被自己的泡泡击中。
+              秒后十字爆炸。钢柱阻挡冲击，爆炸摧毁沿途的第一个彩色方块，也会引爆其他泡泡。圆形钢柱无法炸毁。你也会被自己的泡泡击中。
             </span>
           </p>
           <p>
             <Diamond />
             <span>
-              <b>寻找金色核心</b>单人每关收集 1
-              个地标核心，并击败全部巡逻机器人即可过关。核心藏在金色标记的箱子里，炸开后走过去拾取。
+              <b>清空方块，解锁地标</b>
+              炸掉本关全部彩色方块，即可解锁对应的三高炉、冷却塔或大跳台并过关。剩余数量会实时显示，最后一块炸毁后自动解锁。
             </span>
           </p>
           <p>
@@ -123,7 +123,8 @@ export function Guide({
           </p>
         </div>
         <p className="guide-note">
-          建筑为首钢园地标的像素化演绎，地图为游戏布局。双人模式需要实体键盘，支持同一台电脑两人对战。
+          建筑为首钢园地标的像素化演绎，地图为游戏布局。双人模式需要实体键盘，支持同一台电脑两人对战。开始后自动播放音乐，右上角可分别开关
+          BGM 和音效。
         </p>
         <DialogClose className="start-button">
           明白了，进入园区
@@ -185,7 +186,7 @@ export function LandmarkDialog({
           )}{' '}
           {index !== null && unlocked[index]
             ? '城市记忆已点亮'
-            : '在对应关卡收集金色核心，即可点亮地标。'}
+            : '炸完对应关卡的全部彩色方块，即可解锁地标。'}
         </p>
         <DialogClose className="secondary-button">返回园区</DialogClose>
       </DialogContent>
@@ -208,7 +209,7 @@ export function GameHUD({
         <div className="player-hud">
           <span className="player-token">P1</span>
           <div>
-            <b>青绿 / 探索者</b>
+            <b>青岚 / 侦察型</b>
             <div className="hearts">
               {[0, 1, 2].slice(0, state.mode === 'solo' ? 3 : 1).map((i) => (
                 <Heart
@@ -237,7 +238,7 @@ export function GameHUD({
           {state.mode === 'duel' ? (
             <>
               <div>
-                <b>珊瑚 / 挑战者</b>
+                <b>赤焰 / 重装型</b>
                 <div className="hearts">
                   <Heart size={15} fill={q.alive ? 'currentColor' : 'none'} />
                 </div>
@@ -270,14 +271,26 @@ export function GameHUD({
               <>
                 {' '}
                 <Diamond size={17} />
-                {state.coreCollected
-                  ? '核心已回收 · 击败剩余机器人'
-                  : `回收${LEVELS[state.level].landmark}核心`}
+                {state.landmarkUnlocked
+                  ? `${LEVELS[state.level].landmark}已解锁`
+                  : `炸完方块，解锁${LEVELS[state.level].landmark}`}
               </>
             ) : (
               '存活到最后，赢得对决'
             )}
           </b>
+          {state.mode === 'solo' && (
+            <div className="block-progress">
+              <span>
+                剩余方块 <b>{state.remainingBlocks}</b> / {state.initialBlocks}
+              </span>
+              <progress
+                aria-label="方块清理进度"
+                value={state.initialBlocks - state.remainingBlocks}
+                max={state.initialBlocks || 1}
+              />
+            </div>
+          )}
           <div className="player-stats">
             <span>
               <Droplets size={13} />
@@ -314,9 +327,9 @@ export function Result({
       : r === 'won'
         ? '区域探索完成'
         : r === 'p1'
-          ? '青绿玩家获胜'
+          ? '青岚玩家获胜'
           : r === 'p2'
-            ? '珊瑚玩家获胜'
+            ? '赤焰玩家获胜'
             : r === 'draw'
               ? '势均力敌'
               : r === 'timeout'
@@ -353,12 +366,10 @@ export function Result({
           <span>
             <b>
               {state.mode === 'solo'
-                ? state.coreCollected
-                  ? '已回收'
-                  : '未回收'
+                ? `${state.remainingBlocks} 块`
                 : '本地双人'}
             </b>
-            {state.mode === 'solo' ? '地标核心' : '对战模式'}
+            {state.mode === 'solo' ? '剩余方块' : '对战模式'}
           </span>
         </div>
         <button

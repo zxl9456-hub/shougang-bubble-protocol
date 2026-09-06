@@ -1509,3 +1509,113 @@ kbd {
     transition-duration: 0.01ms !important;
   }
 }
+
+.audio-toggle[aria-pressed='false'] {
+  opacity: 0.55;
+}
+.audio-toggle span {
+  font-size: 12px;
+}
+.block-progress {
+  margin-top: 11px;
+  font-size: 14px;
+}
+.block-progress span {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  color: #b9cce4;
+}
+.block-progress b {
+  color: #ffe3a1;
+  font-size: 23px;
+  line-height: 1;
+}
+.block-progress progress {
+  display: block;
+  width: 100%;
+  height: 7px;
+  margin-top: 8px;
+  border: 0;
+  appearance: none;
+  background: #202c46;
+}
+.block-progress progress::-webkit-progress-bar {
+  background: #202c46;
+}
+.block-progress progress::-webkit-progress-value {
+  background: #ffb650;
+  transition: width 0.25s;
+}
+.block-progress progress::-moz-progress-bar {
+  background: #ffb650;
+}
+.unlock-celebration {
+  position: absolute;
+  z-index: 6;
+  right: 5%;
+  bottom: 25%;
+  padding: 21px 28px;
+  background: #ecdbb0;
+  border: 3px solid #181d29;
+  box-shadow: 6px 6px #080f26;
+  color: #212333;
+  animation: unlock-arrival 0.3s ease-out;
+}
+.unlock-celebration span,
+.unlock-celebration small {
+  display: block;
+  font-size: 13px;
+  letter-spacing: 1px;
+}
+.unlock-celebration b {
+  display: block;
+  color: #bd392b;
+  font-size: 34px;
+  margin: 6px 0;
+}
+@keyframes unlock-arrival {
+  from {
+    transform: translateY(18px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+@media (max-width: 900px) {
+  .park-title {
+    display: none;
+  }
+}
+@media (max-width: 700px) {
+  .audio-toggle span {
+    display: none;
+  }
+  .header-actions {
+    gap: 6px;
+  }
+  .block-progress {
+    margin-top: 8px;
+    font-size: 12px;
+  }
+  .block-progress b {
+    font-size: 19px;
+  }
+  .unlock-celebration {
+    right: 5%;
+    left: 5%;
+    bottom: 30%;
+    padding: 17px;
+    text-align: center;
+  }
+  .unlock-celebration b {
+    font-size: 29px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .unlock-celebration {
+    animation: none;
+  }
+}

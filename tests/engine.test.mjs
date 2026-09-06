@@ -85,39 +85,73 @@ test('solo player has three lives and receives temporary invulnerability', () =>
   assert.equal(g.players[0].hp, 2);
   assert.equal(g.players[0].alive, true);
 });
-test('core survives its box explosion, only human collects it, and victory requires both objectives', () => {
+test('last block unlocks the landmark without a core or eliminating robots', () => {
   const g = blank('solo');
-  g.grid[3][3] = 3;
-  const b = { id: 50, x: 3, z: 4, range: 2, owner: 1 };
-  g.bombs = [b];
-  g.explode(b);
-  assert(g.pickups.some((v) => v.type === 'core'));
-  const ai = g.players[1];
-  ai.x = 3;
-  ai.z = 3;
-  g.collect(ai);
-  assert.equal(g.coreCollected, false);
-  g.players[0].x = 3;
-  g.players[0].z = 3;
-  g.collect(g.players[0]);
+  g.grid[3][3] = 2;
+  g.grid[7][7] = 2;
+  const bomb = { id: 50, x: 3, z: 4, range: 2, owner: 1 };
+  g.bombs = [bomb];
+  g.explode(bomb);
   g.judge();
-  assert.equal(g.coreCollected, true);
+  assert.equal(g.remainingBlocks, 1);
+  assert.equal(g.landmarkUnlocked, false);
   assert.equal(g.status, 'playing');
-  ai.alive = false;
+  const final = { id: 51, x: 7, z: 8, range: 2, owner: 1 };
+  g.bombs = [final];
+  g.explode(final);
   g.judge();
+  assert.equal(g.remainingBlocks, 0);
+  assert.equal(g.landmarkUnlocked, true);
+  assert.equal(g.players[1].alive, true);
   assert.equal(g.result, 'won');
+  assert.equal(g.drainEvents().filter((e) => e.type === 'unlock').length, 1);
+  g.judge();
+  assert.equal(g.drainEvents().length, 0);
 });
-test('final level completes campaign and timeout does not win solo', () => {
+test('robot destruction counts and a cleared level wins even on a simultaneous final hit', () => {
+  const g = blank('solo');
+  g.grid[3][3] = 2;
+  g.players[0].x = 3;
+  g.players[0].z = 4;
+  g.players[0].hp = 1;
+  g.bombs = [{ id: 60, x: 3, z: 4, range: 2, owner: 2, fuse: 0 }];
+  g.update(0.01);
+  assert.equal(g.players[0].alive, false);
+  assert.equal(g.result, 'won');
+  assert.equal(g.drainEvents().filter((e) => e.type === 'unlock').length, 1);
+});
+test('final block after a real 2.2 second fuse completes the final level', () => {
   const g = blank('solo');
   g.level = 2;
-  g.coreCollected = true;
-  g.players[1].alive = false;
-  g.judge();
+  g.grid[1][3] = 2;
+  g.players[0].invincible = 10;
+  assert(g.placeBomb(1));
+  advance(g, 2);
+  assert.equal(g.grid[1][3], 2);
+  assert.equal(g.landmarkUnlocked, false);
+  advance(g, 0.3);
+  assert.equal(g.grid[1][3], 0);
   assert.equal(g.result, 'complete');
   const h = blank('solo');
+  h.grid[5][5] = 2;
   h.time = 0.01;
   h.update(0.02);
   assert.equal(h.result, 'timeout');
+  assert.equal(h.landmarkUnlocked, false);
+});
+test('clearing blocks in duel preserves last-survivor victory and does not unlock a campaign landmark', () => {
+  const g = blank('duel');
+  g.grid[3][3] = 2;
+  const bomb = { id: 70, x: 3, z: 4, range: 2, owner: 1 };
+  g.bombs = [bomb];
+  g.explode(bomb);
+  g.judge();
+  assert.equal(g.remainingBlocks, 0);
+  assert.equal(g.landmarkUnlocked, false);
+  assert.equal(g.status, 'playing');
+  g.players[1].alive = false;
+  g.judge();
+  assert.equal(g.result, 'p1');
 });
 test('pause freezes movement, fuse and match clock; finished games are inert', () => {
   const g = blank('duel');
@@ -148,12 +182,12 @@ test('powerups respect caps and update abilities', () => {
   assert(p.speed < 0.145);
   assert.equal(p.hp, 3);
 });
-test('all seeded maps keep core reachable by clearing crates and spawns escapable', () => {
+test('all seeded maps keep every block reachable and spawns escapable', () => {
   for (let level = 0; level < 3; level++)
     for (let seed = 0; seed < 100; seed++) {
       const g = new BubbleGame({ level, seed });
-      const [cx, cz] = LEVELS[level].core;
-      assert.equal(g.grid[cz][cx], 3);
+      assert(g.initialBlocks > 0);
+      assert.equal(g.initialBlocks, g.remainingBlocks);
       for (const p of g.players) {
         assert.equal(g.grid[p.z][p.x], 0);
         assert(g.route(p, (x, z) => Math.abs(x - p.x) + Math.abs(z - p.z) > 2));
@@ -177,7 +211,9 @@ test('all seeded maps keep core reachable by clearing crates and spawns escapabl
           }
         }
       }
-      assert(seen.has(`${cx},${cz}`));
+      for (let z = 0; z < g.height; z++)
+        for (let x = 0; x < g.width; x++)
+          if (g.grid[z][x] >= 2) assert(seen.has(`${x},${z}`));
     }
 });
 test('robots move, break barriers and retain valid positions across seeded simulations', () => {

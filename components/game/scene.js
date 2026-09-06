@@ -75,6 +75,17 @@ export class ParkScene {
     this.landmarks = built.landmarks;
     this.reflector = built.reflector;
     this.floorTexture = built.floorTexture;
+    this.showcase = new T.Group();
+    const scout = animatedRunner(this.assets.runner, '#39d8f5'),
+      forge = animatedRunner(this.assets.forge, '#ff7753');
+    scout.position.set(2.5, 0.08, 11.3);
+    forge.position.set(5, 0.08, 10.3);
+    scout.scale.setScalar(2.1);
+    forge.scale.setScalar(2.1);
+    scout.rotation.y = 0.6;
+    forge.rotation.y = 0.48;
+    this.showcase.add(scout, forge);
+    this.scene.add(this.showcase);
     [
       [-2.6, 10.2, -7.7],
       [5.2, 7.2, -10.8],
@@ -122,11 +133,12 @@ export class ParkScene {
     this.lobbyCamera.updateProjectionMatrix();
   }
   setUnlocked(flags) {
+    this.unlocked = [...flags];
     this.landmarks.forEach((g, i) =>
       g.traverse((o) => {
         if (o.isMesh)
           o.material.emissiveIntensity =
-            o.userData.glow * (flags[i] ? 1.8 : 0.5);
+            o.userData.glow * (flags[i] ? 1.8 : 0.12);
       }),
     );
     this.labels.forEach((l) =>
@@ -134,6 +146,12 @@ export class ParkScene {
     );
   }
   setPlaying(v) {
+    this.reveal = null;
+    if (this.unlocked) this.setUnlocked(this.unlocked);
+    this.bloom.strength = 0.55;
+    this.showcase.visible = !v;
+    this.lobbyCamera.position.set(16, 10.5, 24);
+    this.lobbyCamera.lookAt(-0.8, 3.1, -5);
     this.playing = v;
     this.camera = v ? this.gameCamera : this.lobbyCamera;
     this.renderPass.camera = this.camera;
@@ -159,11 +177,36 @@ export class ParkScene {
         let m;
         if (type === 1) {
           m = new T.Group();
-          box(m, 0, 0.32, 0, 0.91, 0.64, 0.91, M.steel);
-          box(m, 0, 0.66, 0, 0.92, 0.06, 0.92, M.concrete);
-          box(m, 0, 0.47, 0.465, 0.25, 0.06, 0.025, M.cyan);
+          const border =
+            x === 0 ||
+            z === 0 ||
+            x === state.width - 1 ||
+            z === state.height - 1;
+          cyl(
+            m,
+            0,
+            border ? 0.11 : 0.3,
+            0,
+            border ? 0.24 : 0.34,
+            border ? 0.22 : 0.6,
+            M.steel,
+            undefined,
+            16,
+          );
+          cyl(
+            m,
+            0,
+            border ? 0.24 : 0.63,
+            0,
+            border ? 0.25 : 0.35,
+            0.05,
+            M.concrete,
+            undefined,
+            16,
+          );
+          ring(m, 0, border ? 0.245 : 0.49, 0, border ? 0.25 : 0.35, M.cyan);
           m = merge(m);
-        } else m = crate(type === 3);
+        } else m = crate((x + z) % 3 === 0);
         m.position.copy(this.position(x, z, 0.17));
         m.userData.type = type;
         this.tiles.set(k, m);
@@ -209,7 +252,10 @@ export class ParkScene {
   createEntity(e) {
     let g = new T.Group();
     if (e.kind === 'player') {
-      g = animatedRunner(this.assets.runner, e.color);
+      g = animatedRunner(
+        e.id % 2 === 0 ? this.assets.forge : this.assets.runner,
+        e.color,
+      );
       ring(g, 0, 0.015, 0, 0.39, material(e.color, 1.5));
     }
     if (e.kind === 'bomb') {
@@ -235,8 +281,7 @@ export class ParkScene {
       g.add(spark);
     }
     if (e.kind === 'pickup') {
-      const ma =
-        e.type === 'core' ? M.amber : e.type === 'range' ? M.pink : M.cyan;
+      const ma = e.type === 'range' ? M.pink : M.cyan;
       const m = new T.Mesh(new T.OctahedronGeometry(0.26, 0), ma);
       m.position.y = 0.5;
       g.add(m);
@@ -255,6 +300,8 @@ export class ParkScene {
     return g;
   }
   handleEvent(event) {
+    if (event.type === 'destroy')
+      this.burst(this.position(event.x, event.z, 0.5), 20, '#ffb85b');
     const m = this.models.get(`player-${event.player}`);
     if (!m) return;
     if (event.type === 'bomb') {
@@ -265,6 +312,18 @@ export class ParkScene {
       playAction(m, 'Hit', true);
       m.userData.actionUntil = this.elapsed + 0.66;
     }
+  }
+  celebrateLandmark(index) {
+    const landmark = this.landmarks[index];
+    if (!landmark) return;
+    this.reveal = { index, time: 0 };
+    this.camera = this.lobbyCamera;
+    this.renderPass.camera = this.camera;
+    const center = landmark.position.clone();
+    this.lobbyCamera.position.copy(center).add(new T.Vector3(11, 9, 17));
+    this.lobbyCamera.lookAt(center.clone().add(new T.Vector3(0, 3, 0)));
+    this.burst(center.clone().add(new T.Vector3(0, 4, 0)), 75, '#ffe395');
+    this.bloom.strength = 0.85;
   }
   burst(pos, n, color) {
     if (this.reduced) return;
@@ -289,6 +348,20 @@ export class ParkScene {
   update(dt) {
     this.elapsed += dt;
     const t = this.elapsed;
+    if (this.showcase.visible)
+      for (const model of this.showcase.children)
+        model.userData.mixer.update(dt);
+    if (this.reveal) {
+      this.reveal.time += dt;
+      const pulse =
+        Math.max(0, 1 - this.reveal.time / 2.1) *
+        (1 + Math.sin(this.reveal.time * 12) * 0.3);
+      this.landmarks[this.reveal.index].traverse((o) => {
+        if (o.isMesh)
+          o.material.emissiveIntensity = o.userData.glow * (1.8 + pulse * 2);
+      });
+      this.bloom.strength = 0.55 + pulse * 0.3;
+    }
     for (const [key, m] of this.models) {
       const e = m.userData.entity,
         target = this.position(e.x, e.z, 0.18);

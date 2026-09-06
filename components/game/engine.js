@@ -4,26 +4,23 @@ export const LEVELS = [
   {
     name: '炉火重燃',
     landmark: '三高炉',
-    subtitle: '穿过高炉前的旧厂区，取回炉心。',
-    core: [7, 1],
+    subtitle: '清空高炉前的彩色方块，重新点亮炉火。',
     enemies: 1,
-    time: 180,
+    time: 240,
   },
   {
     name: '冷却回路',
     landmark: '冷却塔',
     subtitle: '打通冷却回路，让塔身重新亮起。',
-    core: [5, 9],
     enemies: 2,
-    time: 180,
+    time: 240,
   },
   {
     name: '飞向未来',
     landmark: '雪飞天',
-    subtitle: '唤醒最后的能量核心，点亮雪飞天。',
-    core: [7, 5],
+    subtitle: '炸开最后一片方块，让大跳台重新亮起。',
     enemies: 3,
-    time: 210,
+    time: 270,
   },
 ];
 const DIRS = [
@@ -51,7 +48,7 @@ export class BubbleGame {
     this.bombs = [];
     this.blasts = [];
     this.pickups = [];
-    this.coreCollected = false;
+    this.landmarkUnlocked = false;
     this.destroyed = 0;
     this.revision = 0;
     this.grid = Array.from({ length: HEIGHT }, (_, z) =>
@@ -90,10 +87,7 @@ export class BubbleGame {
       ])
         if (this.grid[z + dz][x + dx] === 2) this.grid[z + dz][x + dx] = 0;
     }
-    if (mode === 'solo') {
-      const [cx, cz] = LEVELS[this.level].core;
-      this.grid[cz][cx] = 3;
-    }
+    this.initialBlocks = this.remainingBlocks;
     this.players = spawns
       .slice(0, mode === 'duel' ? 2 : LEVELS[this.level].enemies + 1)
       .map(([x, z], i) => ({
@@ -113,9 +107,9 @@ export class BubbleGame {
         speed: 0.145,
         color:
           i === 0
-            ? '#73ffdb'
+            ? '#39d8f5'
             : i === 1
-              ? '#ff638a'
+              ? '#ff7753'
               : i === 2
                 ? '#ffc162'
                 : '#bd8fff',
@@ -125,6 +119,12 @@ export class BubbleGame {
   random() {
     this.seed = (Math.imul(this.seed, 1664525) + 1013904223) >>> 0;
     return this.seed / 4294967296;
+  }
+  get remainingBlocks() {
+    return this.grid.reduce(
+      (total, row) => total + row.filter((v) => v >= 2).length,
+      0,
+    );
   }
   id() {
     return ++this.serial;
@@ -176,13 +176,7 @@ export class BubbleGame {
   collect(p) {
     const found = this.pickups.filter((v) => v.x === p.x && v.z === p.z);
     for (const v of found) {
-      if (v.type === 'core' && p.id !== 1) continue;
       this.pickups = this.pickups.filter((a) => a !== v);
-      if (v.type === 'core') {
-        this.coreCollected = true;
-        this.score += 200;
-        this.emit('core', { level: this.level });
-      }
       if (v.type === 'range') p.range = Math.min(5, p.range + 1);
       if (v.type === 'capacity') p.capacity = Math.min(5, p.capacity + 1);
       if (v.type === 'speed') p.speed = Math.max(0.085, p.speed - 0.018);
@@ -319,16 +313,8 @@ export class BubbleGame {
           this.grid[z][x] = 0;
           this.destroyed++;
           if (b.owner === 1) this.score += 10;
-          this.emit('destroy', { x, z });
-          if (type === 3)
-            this.pickups.push({
-              id: this.id(),
-              x,
-              z,
-              type: 'core',
-              safeUntil: 0.55,
-            });
-          else if (this.random() < 0.32) {
+          this.emit('destroy', { x, z, owner: b.owner });
+          if (this.random() < 0.32) {
             const types = ['range', 'capacity', 'speed', 'heart'];
             this.pickups.push({
               id: this.id(),
@@ -341,6 +327,19 @@ export class BubbleGame {
         }
       }
       this.emit('explode', { x: b.x, z: b.z });
+    }
+    if (
+      this.mode === 'solo' &&
+      !this.landmarkUnlocked &&
+      this.destroyed > 0 &&
+      this.remainingBlocks === 0
+    ) {
+      this.landmarkUnlocked = true;
+      this.score += 300;
+      this.emit('unlock', {
+        level: this.level,
+        landmark: LEVELS[this.level].landmark,
+      });
     }
   }
   damage() {
@@ -363,13 +362,11 @@ export class BubbleGame {
     this.emit('finish', { result });
   }
   judge() {
+    if (this.status !== 'playing') return;
     if (this.mode === 'solo') {
-      if (!this.players[0].alive) this.finish('lost');
-      else if (
-        this.coreCollected &&
-        this.players.filter((p) => p.ai).every((p) => !p.alive)
-      )
+      if (this.landmarkUnlocked)
         this.finish(this.level === 2 ? 'complete' : 'won');
+      else if (!this.players[0].alive) this.finish('lost');
       else if (this.time <= 0) this.finish('timeout');
     } else {
       const live = this.players.filter((p) => p.alive);
@@ -411,7 +408,9 @@ export class BubbleGame {
       result: this.result,
       paused: this.paused,
       score: this.score,
-      coreCollected: this.coreCollected,
+      landmarkUnlocked: this.landmarkUnlocked,
+      remainingBlocks: this.remainingBlocks,
+      initialBlocks: this.initialBlocks,
       destroyed: this.destroyed,
       revision: this.revision,
     };

@@ -4,14 +4,14 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 let pending;
 export function loadParkAssets() {
   pending ??= Promise.all([
-    ...['furnace-v2', 'cooling-v2', 'big-air-v2', 'runner-v2'].map((name) =>
-      new GLTFLoader().loadAsync(`/models/${name}.glb`),
+    ...['furnace-v2', 'cooling-v2', 'big-air-v2', 'scout-v3', 'forge-v3'].map(
+      (name) => new GLTFLoader().loadAsync(`/models/${name}.glb`),
     ),
     new T.TextureLoader().loadAsync('/art/pixel-skyline.png'),
   ])
-    .then(([furnace, cooling, ramp, runner, sky]) => {
+    .then(([furnace, cooling, ramp, runner, forge, sky]) => {
       sky.colorSpace = T.SRGBColorSpace;
-      return { furnace, cooling, ramp, runner, sky };
+      return { furnace, cooling, ramp, runner, forge, sky };
     })
     .catch((e) => {
       pending = null;
@@ -49,10 +49,40 @@ export function staticModel(asset) {
   }
   return root;
 }
+const animatedTemplates = new WeakMap();
+function batchRig(asset) {
+  if (animatedTemplates.has(asset)) return animatedTemplates.get(asset);
+  const rig = asset.scene.clone(true),
+    groups = [];
+  rig.traverse((node) => {
+    if (node.children.some((c) => c.isMesh)) groups.push(node);
+  });
+  for (const group of groups) {
+    const buckets = new Map();
+    for (const child of [...group.children]) {
+      if (!child.isMesh) continue;
+      child.updateMatrix();
+      const geometry = child.geometry.index
+        ? child.geometry.toNonIndexed()
+        : child.geometry.clone();
+      geometry.applyMatrix4(child.matrix);
+      const bucket = buckets.get(child.material) || [];
+      bucket.push(geometry);
+      buckets.set(child.material, bucket);
+      group.remove(child);
+    }
+    for (const [mat, geos] of buckets) {
+      group.add(new T.Mesh(mergeGeometries(geos), mat));
+      geos.forEach((g) => g.dispose());
+    }
+  }
+  animatedTemplates.set(asset, rig);
+  return rig;
+}
 export function animatedRunner(asset, color) {
   const outer = new T.Group(),
-    model = asset.scene.clone(true);
-  model.scale.setScalar(0.83);
+    model = batchRig(asset).clone(true);
+  model.scale.setScalar(0.76);
   outer.add(model);
   model.traverse((o) => {
     if (o.isMesh) {

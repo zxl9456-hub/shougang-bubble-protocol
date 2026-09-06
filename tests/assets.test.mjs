@@ -12,13 +12,14 @@ import { buildDistrict } from '../components/game/environment.js';
 
 const assets = {};
 for (const [key, file] of [
-  ['furnace', 'furnace'],
-  ['cooling', 'cooling'],
-  ['ramp', 'big-air'],
-  ['runner', 'runner'],
+  ['furnace', 'furnace-v2'],
+  ['cooling', 'cooling-v2'],
+  ['ramp', 'big-air-v2'],
+  ['runner', 'scout-v3'],
+  ['forge', 'forge-v3'],
 ]) {
   const bytes = await fs.readFile(
-    new URL(`../public/models/${file}-v2.glb`, import.meta.url),
+    new URL(`../public/models/${file}.glb`, import.meta.url),
   );
   assets[key] = await new GLTFLoader().parseAsync(
     bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
@@ -40,52 +41,63 @@ test('Blender landmarks retain their dimensions after material batching', () => 
   }
   assert.ok(new T.Box3().setFromObject(assets.furnace.scene).max.y > 8);
 });
-test('runner exports a complete body and faces its direction of travel', () => {
-  const runner = animatedRunner(assets.runner, '#18d8ff');
-  runner.userData.mixer.update(0);
-  const bounds = new T.Box3().setFromObject(runner);
-  assert.ok(bounds.max.y > 1.1 && bounds.max.y < 1.4, 'helmet/antenna height');
-  assert.ok(bounds.min.y > -0.1, 'feet near origin');
-  const visor = runner
-    .getObjectByName('Visor_glass')
-    .getWorldPosition(new T.Vector3());
-  const helmet = runner
-    .getObjectByName('Helmet')
-    .getWorldPosition(new T.Vector3());
-  assert.ok(
-    visor.z > helmet.z,
-    'visor must face positive Z before heading rotation',
-  );
-  assert.ok(helmet.y > 0.7, 'helmet hierarchy must retain rest transforms');
-});
-test('runner clips animate independently and transition back to Idle', () => {
-  const a = animatedRunner(assets.runner, '#18d8ff'),
-    b = animatedRunner(assets.runner, '#ff52cf');
-  assert.deepEqual(Object.keys(a.userData.actions).sort(), [
-    'Hit',
-    'Idle',
-    'PlaceBubble',
-    'Walk',
-  ]);
-  a.userData.mixer.update(0);
-  b.userData.mixer.update(0);
-  const still = b.getObjectByName('Leg_L').quaternion.clone();
-  playAction(a, 'Walk');
-  a.userData.mixer.update(0.2);
-  assert.ok(a.getObjectByName('Leg_L').quaternion.angleTo(still) > 0.15);
-  assert.ok(b.getObjectByName('Leg_L').quaternion.angleTo(still) < 0.001);
-  for (const name of ['PlaceBubble', 'Hit']) {
-    playAction(a, name, true);
-    a.userData.mixer.update(0.2);
+function node(root, name) {
+  let result;
+  root.traverse((o) => {
+    if (new RegExp('^' + name + '[0-9]*$').test(o.name)) result = o;
+  });
+  assert.ok(result, name);
+  return result;
+}
+for (const key of ['runner', 'forge']) {
+  test(`${key} body retains dimensions and faces its travel heading after batching`, () => {
+    const runner = animatedRunner(assets[key], '#18d8ff');
+    runner.userData.mixer.update(0);
+    const bounds = new T.Box3().setFromObject(runner);
+    assert.ok(bounds.max.y > 1 && bounds.max.y < 1.5);
+    assert.ok(bounds.min.y > -0.1);
+    const raw = assets[key].scene;
+    raw.updateMatrixWorld(true);
     assert.ok(
-      a.getObjectByName('Helmet').getWorldPosition(new T.Vector3()).y > 0.6,
+      node(raw, 'Visor_glass').getWorldPosition(new T.Vector3()).z >
+        node(raw, 'Helmet').getWorldPosition(new T.Vector3()).z,
     );
-    a.userData.mixer.update(1);
-    playAction(a, 'Idle');
+    assert.ok(node(runner, 'Helmet').getWorldPosition(new T.Vector3()).y > 0.7);
+    let before = 0,
+      after = 0;
+    raw.traverse((o) => (before += o.isMesh ? 1 : 0));
+    runner.traverse((o) => (after += o.isMesh ? 1 : 0));
+    assert.ok(after < before);
+    const expected = new T.Box3().setFromObject(raw);
+    assert.ok(bounds.max.distanceTo(expected.max.multiplyScalar(0.76)) < 0.001);
+  });
+  test(`${key} four animation clips play independently and return to Idle`, () => {
+    const a = animatedRunner(assets[key], '#18d8ff'),
+      b = animatedRunner(assets[key], '#ff52cf');
+    assert.deepEqual(Object.keys(a.userData.actions).sort(), [
+      'Hit',
+      'Idle',
+      'PlaceBubble',
+      'Walk',
+    ]);
+    a.userData.mixer.update(0);
+    b.userData.mixer.update(0);
+    const still = node(b, 'Leg_L').quaternion.clone();
+    playAction(a, 'Walk');
     a.userData.mixer.update(0.2);
-    assert.equal(a.userData.currentAction, 'Idle');
-  }
-});
+    assert.ok(node(a, 'Leg_L').quaternion.angleTo(still) > 0.15);
+    assert.ok(node(b, 'Leg_L').quaternion.angleTo(still) < 0.001);
+    for (const name of ['PlaceBubble', 'Hit']) {
+      playAction(a, name, true);
+      a.userData.mixer.update(0.2);
+      assert.ok(node(a, 'Helmet').getWorldPosition(new T.Vector3()).y > 0.6);
+      a.userData.mixer.update(1);
+      playAction(a, 'Idle');
+      a.userData.mixer.update(0.2);
+      assert.equal(a.userData.currentAction, 'Idle');
+    }
+  });
+}
 test('district geometry constructs with the exported assets', () => {
   const previous = globalThis.document;
   globalThis.document = {

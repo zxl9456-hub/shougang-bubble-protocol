@@ -4,6 +4,7 @@ import {
   ArrowRight,
   Volume2,
   VolumeX,
+  Music2,
   BookOpen,
   Users,
   User,
@@ -52,7 +53,9 @@ export default function Game() {
     [state, setState] = useState<any>(null),
     [paused, setPaused] = useState(false),
     [countdown, setCountdown] = useState(0),
-    [audioEnabled, setAudioEnabled] = useState(false),
+    [musicEnabled, setMusicEnabled] = useState(true),
+    [sfxEnabled, setSfxEnabled] = useState(true),
+    [resultVisible, setResultVisible] = useState(false),
     [guide, setGuide] = useState(false),
     [landmark, setLandmark] = useState<number | null>(null),
     [progress, setProgress] = useState(emptyProgress),
@@ -70,9 +73,7 @@ export default function Game() {
     engine.current.paused = value;
     setPaused(value);
     keys.current.clear();
-    value
-      ? sound.current?.suspend()
-      : sound.current?.enabled && sound.current?.start();
+    sound.current?.setPaused(value);
   }, []);
   const start = useCallback(
     (chosenMode: string, chosenLevel: number, score = 0) => {
@@ -96,7 +97,10 @@ export default function Game() {
       setLevel(chosenLevel);
       park.current.setPlaying(true);
       park.current.sync(game.snapshot());
-      if (sound.current?.enabled) sound.current.start();
+      sound.current?.setPaused(false);
+      sound.current
+        ?.activate()
+        .catch(() => setToast('点击 BGM 按钮可开启背景音乐。'));
     },
     [],
   );
@@ -112,6 +116,7 @@ export default function Game() {
     engine.current = demo;
     park.current?.setPlaying(false);
     park.current?.sync(demo.snapshot());
+    sound.current?.setPaused(false);
   }, []);
   actions.current = {
     start,
@@ -140,7 +145,7 @@ export default function Game() {
         setLevel(p.stage);
       }
     } catch {}
-    sound.current = new ParkAudio();
+    sound.current = new ParkAudio((message: string) => setToast(message));
     import('./scene.js')
       .then(async ({ ParkScene }) => {
         if (stopped || !host.current) return;
@@ -189,24 +194,23 @@ export default function Game() {
             }
             for (const event of game.drainEvents()) {
               if (!activeRef.current) continue;
-              sound.current.play(event.type);
+              sound.current.play(event);
               park.current.handleEvent?.(event);
-              if (event.type === 'core') {
+              if (event.type === 'unlock') {
                 const p = {
                   ...progressRef.current,
                   unlocked: [...progressRef.current.unlocked],
                 };
                 p.unlocked[game.level] = true;
                 saveProgress(p);
-                setToast(`${LEVELS[game.level].landmark}已点亮 · 城市记忆 +1`);
+                park.current.celebrateLandmark(event.level);
+                setToast(
+                  `全部方块已清空 · ${LEVELS[game.level].landmark}已解锁`,
+                );
                 clearTimeout(toastTimer);
                 toastTimer = setTimeout(() => setToast(''), 3500);
               }
-              if (
-                event.type === 'pickup' &&
-                event.pickup !== 'core' &&
-                event.player === 1
-              ) {
+              if (event.type === 'pickup' && event.player === 1) {
                 setToast(
                   (
                     {
@@ -293,7 +297,10 @@ export default function Game() {
       if (activeRef.current) actions.current.pause(true);
     };
     const visibility = () => {
-      if (document.hidden) blur();
+      if (document.hidden) {
+        blur();
+        sound.current?.setPaused(true);
+      } else if (!activeRef.current) sound.current?.setPaused(false);
     };
     window.addEventListener('keydown', down);
     window.addEventListener('keyup', up);
@@ -324,6 +331,7 @@ export default function Game() {
           level: engine.current?.level,
           time: Math.ceil(engine.current?.time || 0),
           unlocked: progressRef.current.unlocked,
+          remainingBlocks: engine.current?.remainingBlocks,
         }),
       });
       register({
@@ -370,13 +378,33 @@ export default function Game() {
       document.removeEventListener('visibilitychange', visibility);
     };
   }, [saveProgress]);
-  const toggleAudio = async () => {
-    const v = !audioEnabled;
+  useEffect(() => {
+    setResultVisible(false);
+    if (state?.status !== 'finished') return;
+    const timer = setTimeout(
+      () => setResultVisible(true),
+      state.landmarkUnlocked ? 2100 : 500,
+    );
+    return () => clearTimeout(timer);
+  }, [state?.status, state?.result]);
+  const toggleMusic = async () => {
+    const value = !musicEnabled;
     try {
-      await sound.current?.enable(v);
-      setAudioEnabled(v);
+      await sound.current?.setMusicEnabled(value);
+      setMusicEnabled(value);
     } catch {
-      setToast('声音暂时无法开启，请重试。');
+      setMusicEnabled(false);
+      sound.current?.setMusicEnabled(false);
+      setToast('音乐暂时无法播放，请再次点击 BGM 重试。');
+    }
+  };
+  const toggleSfx = async () => {
+    const value = !sfxEnabled;
+    try {
+      await sound.current?.setSfxEnabled(value);
+      setSfxEnabled(value);
+    } catch {
+      setToast('音效暂时无法开启，请重试。');
     }
   };
   return (
@@ -409,11 +437,24 @@ export default function Game() {
             玩法指南
           </button>
           <button
-            onClick={toggleAudio}
-            aria-label={audioEnabled ? '关闭声音' : '开启声音'}
-            title={audioEnabled ? '关闭声音' : '开启声音'}
+            onClick={toggleMusic}
+            className="audio-toggle"
+            aria-pressed={musicEnabled}
+            aria-label={musicEnabled ? '关闭背景音乐' : '开启背景音乐'}
+            title={musicEnabled ? '关闭背景音乐' : '开启背景音乐'}
           >
-            {audioEnabled ? <Volume2 size={17} /> : <VolumeX size={17} />}
+            <Music2 size={17} />
+            <span>BGM</span>
+          </button>
+          <button
+            onClick={toggleSfx}
+            className="audio-toggle"
+            aria-pressed={sfxEnabled}
+            aria-label={sfxEnabled ? '关闭音效' : '开启音效'}
+            title={sfxEnabled ? '关闭音效' : '开启音效'}
+          >
+            {sfxEnabled ? <Volume2 size={17} /> : <VolumeX size={17} />}
+            <span>音效</span>
           </button>
         </div>
       </header>
@@ -482,7 +523,7 @@ export default function Game() {
               </button>
               <p className="mode-description">
                 {mode === 'solo'
-                  ? '3 个区域 · 探索地标 · 挑战巡逻机器人'
+                  ? '炸完所有彩色方块 · 逐关解锁 3 处地标'
                   : '同一块键盘 · 两位玩家 · 一场泡泡对决'}
               </p>
               <div className="keyboard-hint">
@@ -514,7 +555,7 @@ export default function Game() {
                   <b>{countdown}</b>
                   <span>
                     {mode === 'solo'
-                      ? '找到金色核心，避开泡泡冲击'
+                      ? '炸完彩色方块，解锁首钢地标'
                       : '准备好了吗？泡泡对决即将开始'}
                   </span>
                 </div>
@@ -530,7 +571,14 @@ export default function Game() {
                   }
                 />
               )}{' '}
-              {state.status === 'finished' && (
+              {state.landmarkUnlocked && !resultVisible && (
+                <div className="unlock-celebration">
+                  <span>ALL BLOCKS CLEARED</span>
+                  <b>{LEVELS[state.level].landmark}已解锁</b>
+                  <small>园区重新亮起 · 城市记忆 +1</small>
+                </div>
+              )}
+              {state.status === 'finished' && resultVisible && (
                 <Result
                   state={state}
                   onRetry={() => start(mode, level)}
