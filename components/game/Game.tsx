@@ -23,6 +23,7 @@ import {
 } from '../ui/dialog';
 import { BubbleGame, LEVELS } from './engine.js';
 import { ParkAudio } from './audio.js';
+import { MOVEMENT_BINDINGS, bombPlayer, canMovePlayer } from './input.js';
 import {
   Guide,
   LANDMARKS,
@@ -141,10 +142,13 @@ export default function Game() {
     } catch {}
     sound.current = new ParkAudio();
     import('./scene.js')
-      .then(({ ParkScene }) => {
+      .then(async ({ ParkScene }) => {
         if (stopped || !host.current) return;
         try {
-          park.current = new ParkScene(host.current);
+          const { loadParkAssets } = await import('./assets.js');
+          const assets = await loadParkAssets();
+          if (stopped || !host.current) return;
+          park.current = new ParkScene(host.current, assets);
           park.current.reduced = matchMedia(
             '(prefers-reduced-motion: reduce)',
           ).matches;
@@ -169,19 +173,10 @@ export default function Game() {
                 countRef.current = Math.max(0, countRef.current - dt);
                 setCountdown(Math.ceil(countRef.current));
               } else {
-                for (const [code, id, dx, dz] of [
-                  ['KeyW', 1, 0, -1],
-                  ['KeyS', 1, 0, 1],
-                  ['KeyA', 1, -1, 0],
-                  ['KeyD', 1, 1, 0],
-                  ['ArrowUp', 2, 0, -1],
-                  ['ArrowDown', 2, 0, 1],
-                  ['ArrowLeft', 2, -1, 0],
-                  ['ArrowRight', 2, 1, 0],
-                ] as const) {
+                for (const [code, id, dx, dz] of MOVEMENT_BINDINGS) {
                   if (
-                    keys.current.has(code) &&
-                    (id === 1 || game.mode === 'duel')
+                    keys.current.has(String(code)) &&
+                    canMovePlayer(id, game.mode)
                   )
                     game.move(id, dx, dz);
                 }
@@ -195,6 +190,7 @@ export default function Game() {
             for (const event of game.drainEvents()) {
               if (!activeRef.current) continue;
               sound.current.play(event.type);
+              park.current.handleEvent?.(event);
               if (event.type === 'core') {
                 const p = {
                   ...progressRef.current,
@@ -287,14 +283,9 @@ export default function Game() {
         return;
       e.preventDefault();
       if (countRef.current > 0) return;
-      if (e.code === 'Space' && !e.repeat) engine.current.placeBomb(1);
-      else if (
-        ['Enter', 'NumpadEnter'].includes(e.code) &&
-        engine.current.mode === 'duel' &&
-        !e.repeat
-      )
-        engine.current.placeBomb(2);
-      else keys.current.add(e.code);
+      const player = bombPlayer(e.code, engine.current.mode);
+      if (player && !e.repeat) engine.current.placeBomb(player);
+      else if (!player) keys.current.add(e.code);
     };
     const up = (e: KeyboardEvent) => keys.current.delete(e.code);
     const blur = () => {
@@ -403,9 +394,10 @@ export default function Game() {
           </span>
           <span>
             首钢<span className="brand-divider">/</span>泡泡计划
-            <small>SHOUGANG BUBBLE PROTOCOL</small>
+            <small>SHOUGANG / BUBBLE NIGHT</small>
           </span>
         </button>
+        <div className="park-title">首钢园 · 霓虹泡泡夜</div>
         <div className="header-actions">
           <button
             onClick={() => {
@@ -440,14 +432,14 @@ export default function Game() {
                 北京 · 首钢园
               </div>
               <h1>
-                钢铁遗迹
+                首钢园
                 <br />
-                <em>泡泡重启。</em>
+                <em>霓虹泡泡夜</em>
               </h1>
               <p className="intro">
-                潜入霓虹下的旧日钢城。
+                旧日钢铁，霓虹新生。
                 <br />
-                放下泡泡，让沉睡的地标再次亮起。
+                放下泡泡，点亮你的首钢记忆。
               </p>
               <Tabs value={mode} onValueChange={(v) => setMode(String(v))}>
                 <TabsList className="mode-picker">
@@ -494,18 +486,18 @@ export default function Game() {
                   : '同一块键盘 · 两位玩家 · 一场泡泡对决'}
               </p>
               <div className="keyboard-hint">
-                <kbd>W</kbd>
+                <kbd>↑</kbd>
                 <div>
-                  <kbd>A</kbd>
-                  <kbd>S</kbd>
-                  <kbd>D</kbd>
+                  <kbd>←</kbd>
+                  <kbd>↓</kbd>
+                  <kbd>→</kbd>
                 </div>
                 <span>移动</span>
                 <kbd className="space">SPACE</kbd>
                 <span>放泡泡</span>
               </div>
               {mode === 'duel' && (
-                <p className="p2-key-hint">P2 / 方向键移动 · Enter 放泡泡</p>
+                <p className="p2-key-hint">P2 / WASD 移动 · Enter 放泡泡</p>
               )}
             </div>
             <div className="scene-caption">

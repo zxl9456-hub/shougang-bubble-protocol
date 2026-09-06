@@ -18,14 +18,14 @@ export function material(color, glow = 0, metal = 0.25) {
   return mats.get(key);
 }
 export const M = {
-  steel: material('#263e4b'),
-  rust: material('#715044'),
-  dark: material('#132936'),
-  concrete: material('#53686f'),
-  cyan: material('#51f8d5', 2),
+  steel: material('#293653'),
+  rust: material('#74504d'),
+  dark: material('#192541'),
+  concrete: material('#59647c'),
+  cyan: material('#29deff', 2),
   amber: material('#ffad4c', 2),
-  pink: material('#ff527c', 2),
-  white: material('#b7d9d3'),
+  pink: material('#f54dcc', 2),
+  white: material('#e9dec3'),
   black: material('#071820'),
 };
 export function box(g, x, y, z, w, h, d, mat = M.steel) {

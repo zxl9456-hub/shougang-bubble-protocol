@@ -46,10 +46,10 @@ export function Controls({ duel = false }: { duel?: boolean }) {
     <div className="control-rows">
       <div>
         <b className="p1-text">P1</b>
-        <kbd>W</kbd>
-        <kbd>A</kbd>
-        <kbd>S</kbd>
-        <kbd>D</kbd>
+        <kbd>↑</kbd>
+        <kbd>←</kbd>
+        <kbd>↓</kbd>
+        <kbd>→</kbd>
         <span>移动</span>
         <kbd>空格</kbd>
         <span>泡泡</span>
@@ -57,10 +57,10 @@ export function Controls({ duel = false }: { duel?: boolean }) {
       {duel && (
         <div>
           <b className="p2-text">P2</b>
-          <kbd>↑</kbd>
-          <kbd>←</kbd>
-          <kbd>↓</kbd>
-          <kbd>→</kbd>
+          <kbd>W</kbd>
+          <kbd>A</kbd>
+          <kbd>S</kbd>
+          <kbd>D</kbd>
           <span>移动</span>
           <kbd>Enter</kbd>
           <span>泡泡</span>
@@ -390,10 +390,10 @@ export function TouchControls({
     <div className="touch-controls">
       <div className="dpad">
         {[
-          ['KeyW', ArrowUp, 'up'],
-          ['KeyA', ArrowLeft, 'left'],
-          ['KeyS', ArrowDown, 'down'],
-          ['KeyD', ArrowRight, 'right'],
+          ['ArrowUp', ArrowUp, 'up'],
+          ['ArrowLeft', ArrowLeft, 'left'],
+          ['ArrowDown', ArrowDown, 'down'],
+          ['ArrowRight', ArrowRight, 'right'],
         ].map(([code, Icon, cls]: any) => (
           <button
             key={code}

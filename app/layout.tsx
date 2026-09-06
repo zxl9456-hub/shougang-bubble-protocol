@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 export const metadata: Metadata = {
-  title: '首钢泡泡计划 · SHOU GANG / BUBBLE PROTOCOL',
+  title: '首钢园 · 霓虹泡泡夜 / SHOUGANG BUBBLE NIGHT',
   description: '在赛博像素首钢园中放置泡泡、点亮地标。单人闯关与一机双人对战。',
 };
 export default function RootLayout({

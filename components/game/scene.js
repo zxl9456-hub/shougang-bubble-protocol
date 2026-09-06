@@ -1,43 +1,37 @@
 import * as T from 'three';
+import { buildDistrict } from './environment.js';
+import { animatedRunner, playAction } from './assets.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import {
-  M,
-  material,
-  box,
-  cyl,
-  beam,
-  ring,
-  merge,
-  furnace,
-  coolingTower,
-  bigAir,
-  runner,
-  crate,
-} from './models.js';
+import { M, material, box, cyl, ring, merge, crate } from './models.js';
 export class ParkScene {
-  constructor(host) {
+  constructor(host, assets) {
+    this.assets = assets;
     this.host = host;
     this.scene = new T.Scene();
-    this.scene.background = new T.Color('#07141e');
-    this.scene.fog = new T.FogExp2('#07141e', 0.024);
+    this.scene.background = new T.Color('#070d30');
+    this.scene.fog = new T.FogExp2('#151343', 0.009);
     this.renderer = new T.WebGLRenderer({
       antialias: false,
       powerPreference: 'high-performance',
     });
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+    this.renderer.setPixelRatio(1);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = T.PCFShadowMap;
     this.renderer.toneMapping = T.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.35;
+    this.renderer.toneMappingExposure = 1.1;
     host.appendChild(this.renderer.domElement);
-    this.camera = new T.OrthographicCamera(-15, 15, 12, -12, 0.1, 140);
-    this.camera.position.set(16, 23, 29);
-    this.camera.lookAt(0, 1, -1.8);
-    this.scene.add(new T.HemisphereLight('#9fdcca', '#152235', 2.3));
-    const sun = new T.DirectionalLight('#accfe1', 3.1);
+    this.lobbyCamera = new T.PerspectiveCamera(48, 1, 0.1, 180);
+    this.lobbyCamera.position.set(16, 10.5, 24);
+    this.lobbyCamera.lookAt(-0.8, 3.1, -5);
+    this.gameCamera = new T.OrthographicCamera(-15, 15, 12, -12, 0.1, 180);
+    this.gameCamera.position.set(5, 21, 27);
+    this.gameCamera.lookAt(0, 0.7, 1.7);
+    this.camera = this.lobbyCamera;
+    this.scene.add(new T.HemisphereLight('#8298ff', '#181024', 1.6));
+    const sun = new T.DirectionalLight('#73c8ff', 2.1);
     sun.position.set(-8, 18, 8);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
@@ -51,12 +45,18 @@ export class ParkScene {
     });
     sun.shadow.bias = -0.001;
     this.scene.add(sun);
-    const rim = new T.DirectionalLight('#ff9270', 1.5);
+    const rim = new T.DirectionalLight('#ff389e', 2.1);
     rim.position.set(10, 8, -10);
     this.scene.add(rim);
     this.composer = new EffectComposer(this.renderer);
-    this.composer.addPass(new RenderPass(this.scene, this.camera));
-    this.bloom = new UnrealBloomPass(new T.Vector2(1024, 768), 0.42, 0.4, 1.05);
+    this.renderPass = new RenderPass(this.scene, this.camera);
+    this.composer.addPass(this.renderPass);
+    this.bloom = new UnrealBloomPass(
+      new T.Vector2(1024, 768),
+      0.55,
+      0.45,
+      1.15,
+    );
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
     this.models = new Map();
@@ -71,110 +71,21 @@ export class ParkScene {
     this.resize();
   }
   buildPark() {
-    const g = new T.Group();
-    box(g, 0, -0.55, 0, 24, 0.7, 22, M.dark);
-    box(g, 0, -0.95, 0, 25, 0.25, 23, M.black);
-    box(g, 0, -0.15, 0, 23.5, 0.13, 21.5, material('#1b303b'));
-    for (let i = -11; i < 12; i++) {
-      box(g, i, 0.005, -1, 0.015, 0.012, 19, material('#29444c'));
-    }
-    for (let z = -10; z < 10; z++)
-      box(g, 0, 0.005, z, 22, 0.012, 0.015, material('#29444c'));
-    // Two disused rail tracks and sleepers along the factory apron.
-    for (const x of [-8.5, -8.1])
-      box(g, x, 0.065, 3, 0.055, 0.045, 15, M.concrete);
-    for (let z = -4; z < 11; z += 0.48)
-      box(g, -8.3, 0.01, z, 0.95, 0.06, 0.1, M.rust);
-    for (let z = -8; z < 10; z += 3.5) {
-      for (const x of [-10.6, 10.6]) {
-        beam(g, [x, 0, z], [x, 2.3, z], 0.04);
-        beam(g, [x, 2.3, z], [x + (x > 0 ? -0.55 : 0.55), 2.3, z], 0.035);
-        box(g, x + (x > 0 ? -0.5 : 0.5), 2.28, z, 0.45, 0.045, 0.12, M.cyan);
-      }
-    }
-    // Elevated pipework is characteristic of the Shougang industrial site.
-    for (const x of [-9.6, 9.6]) {
-      for (const y of [1, 1.35]) beam(g, [x, y, -8], [x, y, 7], 0.14, M.rust);
-      for (let z = -7; z < 8; z += 2.5) {
-        beam(g, [x, 0, z], [x, 1.7, z], 0.08);
-        box(g, x, 1.6, z, 0.9, 0.08, 0.1);
-      }
-    }
-    for (let i = 0; i < 9; i++) {
-      const x = -17 + i * 4.2;
-      const h = 1.5 + ((i * 7) % 5);
-      box(g, x, h / 2, -18, 2.8, h, 3, material('#19313b'));
-      for (let j = 0; j < 4; j++)
-        box(
-          g,
-          x - 1 + j * 0.6,
-          h * 0.7,
-          -16.48,
-          0.16,
-          0.1,
-          0.02,
-          material('#489c97', 0.25),
-        );
-    }
-    for (let i = 0; i < 5; i++) {
-      cyl(g, -14 + i * 6, 5, -21, 0.28, 10, material('#233b43'));
-      cyl(g, -14 + i * 6, 9.5, -21, 0.3, 0.12, M.amber);
-    }
-    this.scene.add(merge(g));
-    this.landmarks = [];
-    const layouts = [
-      [furnace(), -5.7, -7.3, 1.18],
-      [coolingTower(), 0.2, -9, 1.4],
-      [bigAir(), 7, -6.9, 1],
-    ];
-    layouts.forEach(([m, x, z, s], i) => {
-      m.position.set(x, 0.03, z);
-      m.scale.setScalar(s);
-      this.scene.add(m);
-      m.traverse((o) => {
-        if (o.isMesh) {
-          o.material = o.material.clone();
-          o.userData.glow = o.material.emissiveIntensity;
-        }
-      });
-      this.landmarks.push(m);
+    const built = buildDistrict(this.scene, this.assets);
+    this.landmarks = built.landmarks;
+    this.reflector = built.reflector;
+    this.floorTexture = built.floorTexture;
+    [
+      [-2.6, 10.2, -7.7],
+      [5.2, 7.2, -10.8],
+      [-10.6, 6.3, -10.8],
+    ].forEach((p, i) =>
       this.label(
-        ['03 / 三高炉', '02 / 冷却塔', '01 / 雪飞天'][i],
-        new T.Vector3(x, i === 1 ? 7.05 : i === 0 ? 7 : 5.35, z),
+        ['三高炉 / 03', '冷却塔 / 02', '雪飞天 / 01'][i],
+        new T.Vector3(...p),
         i,
-      );
-    });
-    const twin = coolingTower();
-    twin.position.set(3.6, 0, -12);
-    twin.scale.setScalar(0.93);
-    this.scene.add(twin);
-    // Neon perimeter, segmented hazard stripes and structural bolts.
-    const p = new T.Group();
-    box(p, 0, -0.02, 3, 13.6, 0.3, 11.6, M.black);
-    for (const x of [-6.8, 6.8]) box(p, x, 0.14, 3, 0.055, 0.09, 11.6, M.cyan);
-    for (const z of [-2.8, 8.8]) box(p, 0, 0.14, z, 13.6, 0.09, 0.055, M.cyan);
-    for (let x = -6; x <= 6; x++) {
-      box(p, x, 0.17, 9.05, 0.45, 0.02, 0.17, x % 2 === 0 ? M.amber : M.dark);
-    }
-    this.scene.add(merge(p));
-    const stars = new Float32Array(330);
-    for (let i = 0; i < 110; i++) {
-      stars[i * 3] = Math.sin(i * 37.7) * 38;
-      stars[i * 3 + 1] = 8 + ((i * 7) % 15);
-      stars[i * 3 + 2] = -17 - Math.abs(Math.cos(i * 9)) * 22;
-    }
-    const sg = new T.BufferGeometry();
-    sg.setAttribute('position', new T.BufferAttribute(stars, 3));
-    this.stars = new T.Points(
-      sg,
-      new T.PointsMaterial({
-        color: '#6ca1a0',
-        size: 0.04,
-        transparent: true,
-        opacity: 0.6,
-      }),
+      ),
     );
-    this.scene.add(this.stars);
   }
   label(text, position, index) {
     const el = document.createElement('div');
@@ -187,15 +98,28 @@ export class ParkScene {
     let w = this.host.clientWidth,
       h = this.host.clientHeight;
     if (!w || !h) return;
-    this.renderer.setSize(w, h);
-    this.composer.setSize(w, h);
-    const a = w / h;
-    const span = this.playing ? (a < 1 ? 12.5 : 9.8) : a < 1 ? 12 : 10.8;
-    this.camera.left = -span * a;
-    this.camera.right = span * a;
-    this.camera.top = span;
-    this.camera.bottom = -span;
-    this.camera.updateProjectionMatrix();
+    const pixelScale = w < 700 ? 0.95 : 0.8;
+    this.renderer.setSize(
+      Math.round(w * pixelScale),
+      Math.round(h * pixelScale),
+      false,
+    );
+    this.renderer.domElement.style.width = '100%';
+    this.renderer.domElement.style.height = '100%';
+    this.composer.setSize(
+      Math.round(w * pixelScale),
+      Math.round(h * pixelScale),
+    );
+    const a = w / h,
+      span = a < 1 ? 11 : 9.3;
+    this.gameCamera.left = -span * a;
+    this.gameCamera.right = span * a;
+    this.gameCamera.top = span;
+    this.gameCamera.bottom = -span;
+    this.gameCamera.updateProjectionMatrix();
+    this.lobbyCamera.aspect = a;
+    this.lobbyCamera.fov = a < 1 ? 60 : 48;
+    this.lobbyCamera.updateProjectionMatrix();
   }
   setUnlocked(flags) {
     this.landmarks.forEach((g, i) =>
@@ -211,6 +135,8 @@ export class ParkScene {
   }
   setPlaying(v) {
     this.playing = v;
+    this.camera = v ? this.gameCamera : this.lobbyCamera;
+    this.renderPass.camera = this.camera;
     this.resize();
     this.labels.forEach((l) => (l.el.style.opacity = v ? '.6' : '1'));
   }
@@ -283,7 +209,7 @@ export class ParkScene {
   createEntity(e) {
     let g = new T.Group();
     if (e.kind === 'player') {
-      g = runner(e.color);
+      g = animatedRunner(this.assets.runner, e.color);
       ring(g, 0, 0.015, 0, 0.39, material(e.color, 1.5));
     }
     if (e.kind === 'bomb') {
@@ -328,6 +254,18 @@ export class ParkScene {
     }
     return g;
   }
+  handleEvent(event) {
+    const m = this.models.get(`player-${event.player}`);
+    if (!m) return;
+    if (event.type === 'bomb') {
+      playAction(m, 'PlaceBubble', true);
+      m.userData.actionUntil = this.elapsed + 0.6;
+    }
+    if (event.type === 'hurt') {
+      playAction(m, 'Hit', true);
+      m.userData.actionUntil = this.elapsed + 0.66;
+    }
+  }
   burst(pos, n, color) {
     if (this.reduced) return;
     for (let i = 0; i < n; i++) {
@@ -358,13 +296,9 @@ export class ParkScene {
         const delta = m.position.distanceTo(target);
         m.position.lerp(target, Math.min(1, dt * 16));
         if (e.dx || e.dz) m.rotation.y = Math.atan2(e.dx, e.dz);
-        const phase = delta > 0.02 ? Math.sin(t * 20) * 0.6 : 0;
-        m.userData.legs.forEach(
-          (l, i) => (l.rotation.x = phase * (i ? 1 : -1)),
-        );
-        m.userData.arms.forEach(
-          (a, i) => (a.rotation.x = phase * (i ? -1 : 1)),
-        );
+        if (m.userData.actionUntil <= t)
+          playAction(m, delta > 0.02 ? 'Walk' : 'Idle');
+        m.userData.mixer.update(dt);
         m.visible = e.invincible <= 0 || Math.floor(t * 10) % 2 === 0;
       } else if (e.kind === 'bomb') {
         m.position.copy(target);
@@ -398,6 +332,7 @@ export class ParkScene {
     this.composer.render();
   }
   disposeObject(g) {
+    g.userData.mixer?.stopAllAction();
     g.traverse((o) => {
       if (o.isMesh) o.geometry.dispose();
     });
@@ -408,6 +343,8 @@ export class ParkScene {
     this.scene.traverse((o) => {
       if (o.geometry) o.geometry.dispose();
     });
+    this.reflector?.getRenderTarget().dispose();
+    this.floorTexture?.dispose();
     this.composer.dispose();
     this.renderer.dispose();
     this.renderer.domElement.remove();
