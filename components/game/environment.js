@@ -2,25 +2,27 @@ import * as T from 'three';
 import { Reflector } from 'three/addons/objects/Reflector.js';
 import { M, material, box, cyl, beam, merge } from './models.js';
 import { staticModel } from './assets.js';
+import { VoxelLandscape } from './landscape.js';
+import { surfaceMaps } from './cinema.js';
 function asphalt() {
   const c = document.createElement('canvas');
   c.width = c.height = 128;
   const ctx = c.getContext('2d');
-  ctx.fillStyle = '#27334d';
+  ctx.fillStyle = '#485455';
   ctx.fillRect(0, 0, 128, 128);
   let seed = 77;
   for (let i = 0; i < 2600; i++) {
     seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
     const x = seed % 128,
       y = (seed >>> 10) % 128;
-    ctx.fillStyle = ['#1c2743', '#364261', '#26395c', '#202d47'][i % 4];
+    ctx.fillStyle = ['#3a4849', '#5a6663', '#424e50', '#475754'][i % 4];
     ctx.fillRect(x, y, 1 + (i % 3), 1 + (i % 2));
   }
   const t = new T.CanvasTexture(c);
   t.colorSpace = T.SRGBColorSpace;
   t.wrapS = t.wrapT = T.RepeatWrapping;
   t.repeat.set(30, 30);
-  t.magFilter = T.NearestFilter;
+  t.magFilter = T.LinearFilter;
   return t;
 }
 export function sign(
@@ -66,31 +68,45 @@ export function sign(
 export function buildDistrict(scene, assets) {
   const ground = new T.Group();
   const floorTexture = asphalt();
-  const roadMat = new T.MeshStandardMaterial({
+  const maps = surfaceMaps();
+  const roadMat = new T.MeshPhysicalMaterial({
     map: floorTexture,
-    color: '#7583ad',
-    roughness: 0.26,
-    metalness: 0.48,
+    color: '#98a5a2',
+    roughness: 0.7,
+    roughnessMap: maps.roughness,
+    bumpMap: maps.bump,
+    bumpScale: 0.035,
+    clearcoat: 1,
+    clearcoatRoughness: 0.13,
+    metalness: 0.28,
     transparent: true,
-    opacity: 0.81,
+    opacity: 0.84,
   });
   const reflector = new Reflector(new T.PlaneGeometry(90, 70), {
     clipBias: 0.005,
-    textureWidth: 768,
-    textureHeight: 768,
-    color: 0x454572,
+    textureWidth: 1024,
+    textureHeight: 1024,
+    color: 0x889b9c,
   });
   reflector.rotation.x = -Math.PI / 2;
   reflector.position.set(0, -0.07, -8);
+  reflector.userData.excludeFromDepth = true;
+  const updateReflection = reflector.onBeforeRender;
+  reflector.onBeforeRender = function (renderer, world, camera, ...rest) {
+    if (!world.overrideMaterial) updateReflection.call(this, renderer, world, camera, ...rest);
+  };
   scene.add(reflector);
   const floor = new T.Mesh(new T.PlaneGeometry(90, 70), roadMat);
   floor.rotation.x = -Math.PI / 2;
   floor.position.set(0, -0.035, -8);
   floor.receiveShadow = true;
+  floor.userData.keepInDepth = true;
   scene.add(floor);
   // Small pavers keep the play area legible while the street runs through the district.
-  const floorA = material('#303c60', 0, 0.38),
-    floorB = material('#293454', 0, 0.45);
+  const paving = { roughness: 0.32, metalness: 0.32, clearcoat: 0.9, clearcoatRoughness: 0.16,
+    bumpMap: maps.bump, bumpScale: 0.015, roughnessMap: maps.roughness };
+  const floorA = new T.MeshPhysicalMaterial({ ...paving, color: '#526466' }),
+    floorB = new T.MeshPhysicalMaterial({ ...paving, color: '#46595c' });
   for (let z = 0; z < 11; z++)
     for (let x = 0; x < 13; x++) {
       box(
@@ -112,7 +128,7 @@ export function buildDistrict(scene, assets) {
           0.21,
           0.008,
           0.025,
-          material('#546387'),
+          material('#9aa69c'),
         );
     }
   for (const x of [-6.75, 6.75]) {
@@ -151,14 +167,14 @@ export function buildDistrict(scene, assets) {
       box(ground, side * 7.5, 2.97, z, 0.6, 0.07, 0.2, M.cyan);
     }
   }
-  const neonBlue = material('#18d8ff', 1.8),
-    neonPink = material('#f235c2', 1.7),
-    building = material('#132047', 0, 0.65),
-    steel = material('#23375f', 0, 0.7);
+  const neonBlue = material('#8dced5', 0.6),
+    neonPink = material('#f1be86', 0.7),
+    building = material('#4b6267', 0, 0.48),
+    steel = material('#364e52', 0, 0.65);
   for (let i = 0; i < 23; i++) {
     const x = -37 + i * 3.3,
       z = -23 - (i % 4) * 3,
-      h = 4 + ((i * 13) % 11),
+      h = 6 + ((i * 13) % 15),
       w = 1.35 + (i % 3) * 0.45;
     box(ground, x, h / 2, z, w, h, 2, building);
     box(ground, x, h + 0.1, z, w + 0.1, 0.15, 2.1, steel);
@@ -229,35 +245,6 @@ export function buildDistrict(scene, assets) {
     '#81edff',
     false,
   );
-  // Pixel foliage outside the field echoes the neon trees in the reference.
-  const flora = new T.Group();
-  for (const [x, z] of [
-    [8.5, -3.7],
-    [10, 3],
-    [-9, 7],
-  ]) {
-    beam(flora, [x, 0, z], [x, 2, z], 0.09, steel);
-    for (let i = 0; i < 20; i++) {
-      const a = i * 2.4,
-        r = 0.28 + (i % 4) * 0.18;
-      box(
-        flora,
-        x + Math.sin(a) * r,
-        1.5 + (i % 4) * 0.24,
-        z + Math.cos(a) * r,
-        0.33,
-        0.25,
-        0.36,
-        i % 3 ? material('#ac3b9b', 0.2) : material('#246389', 0.25),
-      );
-    }
-  }
-  scene.add(merge(flora));
-  const skyline = new T.Mesh(
-    new T.PlaneGeometry(150, 70),
-    new T.MeshBasicMaterial({ map: assets.sky, fog: false }),
-  );
-  skyline.position.set(0, 27, -53);
-  scene.add(skyline);
-  return { landmarks, reflector, floorTexture };
+  const landscape = new VoxelLandscape(scene);
+  return { landmarks, reflector, floorTexture, maps, landscape };
 }

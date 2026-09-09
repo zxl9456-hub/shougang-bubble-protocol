@@ -14,6 +14,7 @@ import {
   Play,
   Home,
   RotateCcw,
+  Sparkles,
 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger } from '../ui/tabs';
 import {
@@ -44,6 +45,7 @@ export default function Game() {
     activeRef = useRef(false),
     countRef = useRef(0),
     progressRef = useRef(emptyProgress),
+    qualityRef = useRef('high'),
     actions = useRef<any>({});
   const [mode, setMode] = useState('solo'),
     [level, setLevel] = useState(0),
@@ -55,6 +57,7 @@ export default function Game() {
     [countdown, setCountdown] = useState(0),
     [musicEnabled, setMusicEnabled] = useState(true),
     [sfxEnabled, setSfxEnabled] = useState(true),
+    [quality, setQuality] = useState('high'),
     [resultVisible, setResultVisible] = useState(false),
     [guide, setGuide] = useState(false),
     [landmark, setLandmark] = useState<number | null>(null),
@@ -131,6 +134,11 @@ export default function Game() {
       frame = 0,
       toastTimer: any;
     try {
+      const savedQuality = localStorage.getItem('shougang-render-quality-v5');
+      qualityRef.current = savedQuality === 'balanced' || (!savedQuality && window.innerWidth < 700) ? 'balanced' : 'high';
+      setQuality(qualityRef.current);
+    } catch {}
+    try {
       const raw = JSON.parse(localStorage.getItem(STORE) || 'null');
       if (
         raw &&
@@ -155,7 +163,7 @@ export default function Game() {
           const { loadParkAssets } = await import('./assets.js');
           const assets = await loadParkAssets();
           if (stopped || !host.current) return;
-          park.current = new ParkScene(host.current, assets);
+          park.current = new ParkScene(host.current, assets, { quality: qualityRef.current });
           park.current.reduced = matchMedia(
             '(prefers-reduced-motion: reduce)',
           ).matches;
@@ -408,6 +416,13 @@ export default function Game() {
       setToast('音效暂时无法开启，请重试。');
     }
   };
+  const toggleQuality = () => {
+    const next = qualityRef.current === 'high' ? 'balanced' : 'high';
+    qualityRef.current = next;
+    setQuality(next);
+    park.current?.setQuality(next);
+    try { localStorage.setItem('shougang-render-quality-v5', next); } catch {}
+  };
   return (
     <main className={'game-shell ' + (active ? 'in-match' : '')}>
       <header className="topbar">
@@ -429,6 +444,16 @@ export default function Game() {
         <div className="park-title">首钢园 · 霓虹泡泡夜</div>
         <div className="header-actions">
           <button
+            className="quality-toggle"
+            onClick={toggleQuality}
+            aria-label={`当前${quality === 'high' ? '高清' : '流畅'}画质，点击切换`}
+            title={quality === 'high' ? '高清：高分辨率、接触阴影、大厅景深' : '流畅：减少画面特效，保留全部玩法'}
+          >
+            <Sparkles size={17} />
+            <span>{quality === 'high' ? '高清' : '流畅'}</span>
+          </button>
+          <button
+            className="guide-toggle"
             onClick={() => {
               pause(true);
               setGuide(true);

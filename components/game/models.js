@@ -1,5 +1,6 @@
 import * as T from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 const mats = new Map();
 export function material(color, glow = 0, metal = 0.25) {
   const key = `${color}/${glow}/${metal}`;
@@ -10,7 +11,7 @@ export function material(color, glow = 0, metal = 0.25) {
         color,
         emissive: color,
         emissiveIntensity: glow,
-        roughness: 0.72,
+        roughness: 0.52,
         metalness: metal,
         flatShading: true,
       }),
@@ -18,10 +19,10 @@ export function material(color, glow = 0, metal = 0.25) {
   return mats.get(key);
 }
 export const M = {
-  steel: material('#293653'),
-  rust: material('#74504d'),
-  dark: material('#192541'),
-  concrete: material('#59647c'),
+  steel: material('#3c4e50', 0, 0.65),
+  rust: material('#936c53', 0, 0.5),
+  dark: material('#24383d', 0, 0.45),
+  concrete: material('#9ca9a3', 0, 0.1),
   cyan: material('#29deff', 2),
   amber: material('#ffad4c', 2),
   pink: material('#f54dcc', 2),
@@ -73,7 +74,8 @@ export function merge(g) {
   g.traverse((o) => {
     if (o.isMesh) {
       const a = buckets.get(o.material) || [];
-      a.push(o.geometry.clone().applyMatrix4(o.matrixWorld));
+      const geometry = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
+      a.push(geometry.applyMatrix4(o.matrixWorld));
       buckets.set(o.material, a);
     }
   });
@@ -234,16 +236,11 @@ export function runner(color = '#61ffda') {
 }
 export function crate(warm = false) {
   const g = new T.Group();
-  box(
-    g,
-    0,
-    0.38,
-    0,
-    0.78,
-    0.72,
-    0.78,
-    warm ? material('#bc6c3a') : material('#426c91'),
-  );
+  const shell = new T.Mesh(new RoundedBoxGeometry(0.78, 0.72, 0.78, 2, 0.045),
+    warm ? material('#c7844c', 0, 0.42) : material('#458a94', 0, 0.42));
+  shell.position.y = 0.38;
+  shell.castShadow = shell.receiveShadow = true;
+  g.add(shell);
   box(g, 0, 0.77, 0, 0.81, 0.07, 0.81, M.dark);
   for (const x of [-0.32, 0.32])
     for (const z of [-0.32, 0.32]) box(g, x, 0.4, z, 0.07, 0.74, 0.07, M.steel);

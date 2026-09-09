@@ -137,10 +137,10 @@ export class ParkAtmosphere {
       }),
     );
     this.root.add(this.dust);
-    this.key = new T.PointLight('#45e7ff', 45, 24, 2);
+    this.key = new T.PointLight('#45e7ff', 18, 24, 2);
     this.key.position.set(-5, 4, 2);
     this.root.add(this.key);
-    this.fill = new T.PointLight('#f354cf', 38, 22, 2);
+    this.fill = new T.PointLight('#f354cf', 14, 22, 2);
     this.fill.position.set(7, 3, 0);
     this.root.add(this.fill);
   }

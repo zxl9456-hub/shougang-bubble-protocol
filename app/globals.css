@@ -202,14 +202,15 @@ a {
 }
 .scene-host canvas {
   display: block;
-  image-rendering: pixelated;
+  image-rendering: auto;
 }
 .scene-shade {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: linear-gradient(90deg, #060a3130, transparent 50%);
+  background: linear-gradient(90deg, #17292f20, transparent 42%);
 }
+.header-actions .quality-toggle { gap: 6px; }
 .lobby {
   position: relative;
   z-index: 2;
@@ -1129,7 +1130,7 @@ kbd {
   .footer-count {
     display: none;
   }
-  .header-actions button:first-child {
+  .header-actions .guide-toggle {
     font-size: 0;
     gap: 0;
     padding: 0;
@@ -1593,6 +1594,7 @@ kbd {
   .audio-toggle span {
     display: none;
   }
+  .quality-toggle span { display: none; }
   .header-actions {
     gap: 6px;
   }
@@ -1613,6 +1615,12 @@ kbd {
   .unlock-celebration b {
     font-size: 29px;
   }
+}
+@media (max-width: 380px) {
+  .topbar { padding-left: 12px; padding-right: 12px; }
+  .brand { font-size: 14px; gap: 6px; }
+  .header-actions { gap: 4px; }
+  .header-actions button { min-width: 32px; height: 34px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .unlock-celebration {

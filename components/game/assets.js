@@ -8,7 +8,6 @@ export function loadParkAssets() {
     ...['furnace-v2', 'cooling-v2', 'big-air-v2', 'mint-v4', 'peach-v4'].map(
       (name) => new GLTFLoader().loadAsync(assetUrl(`/models/${name}.glb`)),
     ),
-    new T.TextureLoader().loadAsync(assetUrl('/art/pixel-skyline.png')),
     Promise.all(
       ['furnace', 'cooling', 'ramp'].map((name) =>
         fetch(assetUrl(`/mosaics/${name}-floor-v4.json`)).then((response) => {
@@ -18,9 +17,8 @@ export function loadParkAssets() {
       ),
     ),
   ])
-    .then(([furnace, cooling, ramp, runner, forge, sky, mosaics]) => {
-      sky.colorSpace = T.SRGBColorSpace;
-      return { furnace, cooling, ramp, runner, forge, sky, mosaics };
+    .then(([furnace, cooling, ramp, runner, forge, mosaics]) => {
+      return { furnace, cooling, ramp, runner, forge, mosaics };
     })
     .catch((e) => {
       pending = null;
@@ -48,7 +46,11 @@ export function staticModel(asset) {
   const root = new T.Group();
   for (const [mat, geos] of buckets) {
     const material = mat.clone();
-    material.roughness = Math.max(0.3, material.roughness);
+    material.roughness = Math.max(0.25, material.roughness);
+    material.envMapIntensity = 1.2;
+    const palette = [['Steel midnight', '#35484d'], ['Graphite', '#293738'], ['Oxidized copper', '#a57150'], ['Brushed alloy', '#b6c5c0'], ['Painted indigo', '#667e83']];
+    const tone = palette.find(([name]) => material.name.startsWith(name));
+    if (tone) material.color.set(tone[1]);
     const mesh = new T.Mesh(mergeGeometries(geos), material);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
@@ -95,7 +97,15 @@ export function animatedRunner(asset, color) {
   outer.add(model);
   model.traverse((o) => {
     if (o.isMesh) {
-      o.material = o.material.clone();
+      const source = o.material;
+      const polished = new T.MeshPhysicalMaterial();
+      T.MeshStandardMaterial.prototype.copy.call(polished, source);
+      polished.defines = { STANDARD: '', PHYSICAL: '' };
+      polished.clearcoat = source.name.includes('face') ? 1 : 0.65;
+      polished.clearcoatRoughness = 0.16;
+      polished.roughness = Math.min(source.roughness, 0.3);
+      polished.envMapIntensity = 1.15;
+      o.material = polished;
       o.geometry = o.geometry.clone();
       o.castShadow = true;
       o.receiveShadow = true;

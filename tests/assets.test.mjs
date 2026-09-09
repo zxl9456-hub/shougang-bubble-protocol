@@ -67,6 +67,13 @@ for (const key of ['runner', 'forge']) {
       after = 0;
     raw.traverse((o) => (before += o.isMesh ? 1 : 0));
     runner.traverse((o) => (after += o.isMesh ? 1 : 0));
+    runner.traverse((o) => {
+      if (o.isMesh) {
+        assert(o.material.isMeshPhysicalMaterial);
+        assert('PHYSICAL' in o.material.defines, 'clearcoat requires the physical shader variant');
+        assert(o.material.clearcoat > 0);
+      }
+    });
     assert.ok(after < before);
     assert.ok(before < 45, 'cute silhouettes should remain simple');
     const expected = new T.Box3().setFromObject(raw);
