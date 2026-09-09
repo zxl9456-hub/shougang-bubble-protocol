@@ -8,15 +8,25 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { M, material, box, cyl, ring, merge, crate } from './models.js';
-import { createDaylight, ContactShadows, LobbyDepthOfField, resolutionFor } from './cinema.js';
+import {
+  createDaylight,
+  ContactShadows,
+  LobbyDepthOfField,
+  resolutionFor,
+} from './cinema.js';
+import {
+  createGuardian,
+  animateGuardian,
+  EncounterMarkers,
+} from './guardian.js';
 export class ParkScene {
   constructor(host, assets, options = {}) {
     this.assets = assets;
     this.host = host;
     this.quality = options.quality === 'balanced' ? 'balanced' : 'high';
     this.scene = new T.Scene();
-    this.scene.background = new T.Color('#9aafb5');
-    this.scene.fog = new T.Fog('#b5b4aa', 35, 125);
+    this.scene.background = new T.Color('#344a66');
+    this.scene.fog = new T.Fog('#536779', 48, 145);
     this.renderer = new T.WebGLRenderer({
       antialias: true,
       powerPreference: 'high-performance',
@@ -25,7 +35,7 @@ export class ParkScene {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = T.PCFShadowMap;
     this.renderer.toneMapping = T.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 0.92;
+    this.renderer.toneMappingExposure = 0.78;
     this.renderer.outputColorSpace = T.SRGBColorSpace;
     host.appendChild(this.renderer.domElement);
     this.lobbyCamera = new T.PerspectiveCamera(45, 1, 0.1, 400);
@@ -36,8 +46,8 @@ export class ParkScene {
     this.gameCamera.lookAt(0, 0.7, 1.7);
     this.revealCamera = this.gameCamera.clone();
     this.camera = this.lobbyCamera;
-    this.scene.add(new T.HemisphereLight('#b8d7ef', '#5e4b38', 1.65));
-    const sun = new T.DirectionalLight('#ffdda5', 3.4);
+    this.scene.add(new T.HemisphereLight('#b8d7ef', '#5e4b38', 0.9));
+    const sun = new T.DirectionalLight('#ffdda5', 2.1);
     sun.position.set(-18, 26, -12);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
@@ -54,7 +64,7 @@ export class ParkScene {
     sun.shadow.radius = 3;
     this.sun = sun;
     this.scene.add(sun);
-    const rim = new T.DirectionalLight('#a2d9ee', 1.25);
+    const rim = new T.DirectionalLight('#a2d9ee', 0.65);
     rim.position.set(8, 12, 18);
     this.scene.add(rim);
     this.daylight = createDaylight(this.scene, this.renderer);
@@ -69,7 +79,7 @@ export class ParkScene {
     this.composer.addPass(this.contactShadows);
     this.depthOfField = new LobbyDepthOfField(this.scene, this.lobbyCamera);
     this.composer.addPass(this.depthOfField);
-    this.bloom = new UnrealBloomPass(new T.Vector2(1024, 768), 0.34, 0.45, 1.5);
+    this.bloom = new UnrealBloomPass(new T.Vector2(1024, 768), 0.18, 0.3, 2.2);
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
     this.models = new Map();
@@ -91,9 +101,15 @@ export class ParkScene {
     this.floorTexture = built.floorTexture;
     this.surfaceMaps = built.maps;
     this.landscape = built.landscape;
-    this.floorTexture.anisotropy = Math.min(8, this.renderer.capabilities.getMaxAnisotropy());
-    Object.values(this.surfaceMaps).forEach((t) => (t.anisotropy = this.floorTexture.anisotropy));
+    this.floorTexture.anisotropy = Math.min(
+      8,
+      this.renderer.capabilities.getMaxAnisotropy(),
+    );
+    Object.values(this.surfaceMaps).forEach(
+      (t) => (t.anisotropy = this.floorTexture.anisotropy),
+    );
     this.atmosphere = new ParkAtmosphere(this.scene);
+    this.encounterMarkers = new EncounterMarkers(this.scene);
     this.mosaics = this.assets.mosaics.map((data, i) => {
       const m = buildGroundMosaic(data, i);
       this.scene.add(m);
@@ -133,7 +149,12 @@ export class ParkScene {
     let w = this.host.clientWidth,
       h = this.host.clientHeight;
     if (!w || !h) return;
-    const resolution = resolutionFor(w, h, window.devicePixelRatio || 1, this.quality);
+    const resolution = resolutionFor(
+      w,
+      h,
+      window.devicePixelRatio || 1,
+      this.quality,
+    );
     this.renderer.setSize(resolution.width, resolution.height, false);
     this.renderer.domElement.style.width = '100%';
     this.renderer.domElement.style.height = '100%';
@@ -173,14 +194,17 @@ export class ParkScene {
       this.sun.shadow.map = null;
       this.sun.shadow.needsUpdate = true;
     }
-    this.reflector?.getRenderTarget().setSize(high ? 1024 : 512, high ? 1024 : 512);
+    this.reflector
+      ?.getRenderTarget()
+      .setSize(high ? 1024 : 512, high ? 1024 : 512);
     this.resize();
   }
   useCamera(camera) {
     this.camera = camera;
     this.renderPass.camera = camera;
     this.contactShadows.setCamera(camera);
-    this.depthOfField.enabled = this.quality === 'high' && camera === this.lobbyCamera;
+    this.depthOfField.enabled =
+      this.quality === 'high' && camera === this.lobbyCamera;
   }
   setUnlocked(flags) {
     this.unlocked = [...flags];
@@ -201,6 +225,8 @@ export class ParkScene {
   }
   setPlaying(v) {
     this.reveal = null;
+    this.finale = null;
+    this.encounterMarkers.root.visible = true;
     this.mosaics.forEach((m) => {
       m.visible = false;
       m.userData.pixels.count = 0;
@@ -208,7 +234,7 @@ export class ParkScene {
     this.tiles.forEach((m) => (m.visible = true));
     this.atmosphere.reset();
     if (this.unlocked) this.setUnlocked(this.unlocked);
-    this.bloom.strength = 0.34;
+    this.bloom.strength = 0.18;
     this.showcase.visible = !v;
     this.lobbyCamera.position.set(17, 9.2, 23);
     this.lobbyCamera.lookAt(0.8, 2.5, -4.5);
@@ -222,6 +248,7 @@ export class ParkScene {
   }
   sync(state) {
     if (this.reveal && state.status === 'finished') return;
+    this.encounterMarkers?.sync(state);
     const wanted = new Set();
     for (let z = 0; z < state.height; z++)
       for (let x = 0; x < state.width; x++) {
@@ -284,6 +311,16 @@ export class ParkScene {
       ...state.bombs.map((v) => ({ ...v, kind: 'bomb' })),
       ...state.pickups.map((v) => ({ ...v, kind: 'pickup' })),
       ...state.blasts.map((v) => ({ ...v, kind: 'blast' })),
+      ...(state.boss && state.boss.hp > 0
+        ? [
+            {
+              ...state.boss,
+              kind: 'boss',
+              level: state.level,
+              charging: state.warnings.some((w) => w.kind === 'attack'),
+            },
+          ]
+        : []),
     ];
     const seen = new Set();
     for (const e of entities) {
@@ -317,7 +354,9 @@ export class ParkScene {
         e.color,
       );
       ring(g, 0, 0.015, 0, 0.39, material(e.color, 1.5));
+      if (e.minion) g.scale.multiplyScalar(0.75);
     }
+    if (e.kind === 'boss') g = createGuardian(e.level);
     if (e.kind === 'bomb') {
       const sphere = new T.Mesh(
         new T.SphereGeometry(0.35, 32, 20),
@@ -343,7 +382,10 @@ export class ParkScene {
       g.add(sphere);
       ring(g, 0, 0.37, 0, 0.35, material(e.color || '#68ffe4', 2));
       cyl(g, 0, 0.15, 0, 0.14, 0.12, M.white);
-      const spark = new T.Mesh(new T.SphereGeometry(0.07, 12, 8), material('#fff8df', 1.5));
+      const spark = new T.Mesh(
+        new T.SphereGeometry(0.07, 12, 8),
+        material('#fff8df', 1.5),
+      );
       spark.scale.set(0.55, 1.2, 0.5);
       spark.rotation.z = -0.5;
       spark.position.set(-0.13, 0.6, 0.21);
@@ -358,7 +400,7 @@ export class ParkScene {
     }
     if (e.kind === 'blast') {
       const ma = new T.MeshBasicMaterial({
-        color: '#87fff0',
+        color: e.hazard ? '#ff673d' : '#87fff0',
         transparent: true,
         opacity: 0.65,
         depthWrite: false,
@@ -369,6 +411,18 @@ export class ParkScene {
     return g;
   }
   handleEvent(event) {
+    if (
+      event.type === 'boss-hit' ||
+      event.type === 'boss-defeated' ||
+      event.type === 'summon'
+    )
+      this.burst(
+        this.position(event.x, event.z, 0.9),
+        event.type === 'boss-defeated' ? 65 : 16,
+        event.type === 'summon' ? '#cf79ff' : '#ffb24b',
+      );
+    if (event.type === 'finish' && event.result === 'complete')
+      this.finale = { time: 0, next: 0 };
     if (event.type === 'explode' && !this.reduced)
       this.atmosphere.shock(this.position(event.x, event.z, 0.15));
     if (event.type === 'destroy')
@@ -388,6 +442,7 @@ export class ParkScene {
     const landmark = this.landmarks[index];
     if (!landmark) return;
     this.reveal = { index, time: 0 };
+    this.encounterMarkers.root.visible = false;
     this.useCamera(this.revealCamera);
     this.mosaics.forEach((m, i) => (m.visible = i === index));
     this.tiles.forEach((m) => (m.visible = false));
@@ -395,7 +450,7 @@ export class ParkScene {
     this.labels.forEach((l) => (l.el.style.opacity = '0'));
     this.burst(new T.Vector3(-5, 0.3, -1), 30, '#ffe395');
     this.burst(new T.Vector3(5, 0.3, 7), 30, '#71eaff');
-    this.bloom.strength = 0.48;
+    this.bloom.strength = 0.28;
   }
   burst(pos, n, color) {
     if (this.reduced) return;
@@ -422,6 +477,19 @@ export class ParkScene {
     const t = this.elapsed;
     this.atmosphere.update(dt, this.reduced);
     this.landscape.update(dt, this.reduced);
+    this.encounterMarkers.update(t, this.reduced);
+    if (this.finale) {
+      this.finale.time += dt;
+      if (this.finale.time < 9 && this.finale.time >= this.finale.next) {
+        const side = Math.floor(this.finale.next) % 2 ? -1 : 1;
+        this.burst(
+          new T.Vector3(side * 5, 3.5, 1 + Math.sin(this.finale.next) * 3),
+          26,
+          side > 0 ? '#ffcf6e' : '#70e5ff',
+        );
+        this.finale.next += 0.9;
+      }
+    }
     if (!this.playing && !this.reduced) {
       this.lobbyCamera.position.x = 17 + Math.sin(t * 0.075) * 0.45;
       this.lobbyCamera.position.y = 9.2 + Math.sin(t * 0.11) * 0.12;
@@ -444,7 +512,7 @@ export class ParkScene {
         if (o.isMesh)
           o.material.emissiveIntensity = o.userData.glow * (1.8 + pulse * 2);
       });
-      this.bloom.strength = 0.34 + pulse * 0.16;
+      this.bloom.strength = 0.18 + pulse * 0.1;
     }
     for (const [key, m] of this.models) {
       if (this.reveal) {
@@ -461,6 +529,9 @@ export class ParkScene {
           playAction(m, delta > 0.02 ? 'Walk' : 'Idle');
         m.userData.mixer.update(dt);
         m.visible = e.invincible <= 0 || Math.floor(t * 10) % 2 === 0;
+      } else if (e.kind === 'boss') {
+        m.position.copy(target);
+        animateGuardian(m, e, t, this.reduced);
       } else if (e.kind === 'bomb') {
         m.position.copy(target);
         const s = 1 + Math.sin(t * (e.fuse < 0.8 ? 22 : 6)) * 0.07;
@@ -504,6 +575,7 @@ export class ParkScene {
   dispose() {
     this.observer.disconnect();
     this.atmosphere.dispose();
+    this.encounterMarkers.dispose();
     this.landscape.dispose();
     this.daylight.target.dispose();
     this.daylight.sky.geometry.dispose();

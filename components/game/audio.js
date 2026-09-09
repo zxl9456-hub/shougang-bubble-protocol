@@ -135,6 +135,40 @@ export class ParkAudio {
     if (now - (this.last[type] ?? -10) < (type === 'destroy' ? 0.08 : 0.04))
       return;
     this.last[type] = now;
+    if (type === 'boss-awake' || type === 'boss-rage') {
+      [110, 147, 165].forEach((f, i) =>
+        this.tone(f, 0.45, 'sawtooth', 0.075, f * 0.8, i * 0.18),
+      );
+      this.impact(0.65, 0.18, 900);
+    }
+    if (type === 'attack-warning' || type === 'summon-warning') {
+      this.tone(type === 'attack-warning' ? 740 : 494, 0.16, 'triangle', 0.065);
+      this.tone(
+        type === 'attack-warning' ? 740 : 659,
+        0.16,
+        'triangle',
+        0.065,
+        null,
+        0.22,
+      );
+    }
+    if (
+      type === 'boss-attack' ||
+      type === 'boss-hit' ||
+      type === 'boss-defeated'
+    ) {
+      this.impact(type === 'boss-defeated' ? 0.8 : 0.28, 0.24, 1600);
+      this.tone(180, 0.35, 'triangle', 0.16, 45);
+    }
+    if (type === 'summon') this.tone(220, 0.35, 'sine', 0.11, 880);
+    if (type === 'finish' && event.result === 'complete') {
+      [523, 659, 784, 1046, 784, 1046, 1318].forEach((f, i) =>
+        this.tone(f, 0.5, 'triangle', 0.1, null, 0.5 + i * 0.19),
+      );
+      [261.63, 329.63, 392, 523.25].forEach((f) =>
+        this.tone(f, 2, 'sine', 0.065, null, 1.6),
+      );
+    }
     if (type === 'bomb') {
       this.tone(560, 0.14, 'sine', 0.2, 180);
       this.tone(840, 0.07, 'sine', 0.07, 420, 0.03);

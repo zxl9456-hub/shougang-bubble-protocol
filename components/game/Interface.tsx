@@ -22,6 +22,10 @@ import {
   Trophy,
   X,
   Lock,
+  ShieldAlert,
+  Factory,
+  Waves,
+  Mountain,
 } from 'lucide-react';
 import { LEVELS } from './engine.js';
 export const LANDMARKS = [
@@ -102,9 +106,19 @@ export function Guide({
           <p>
             <Diamond />
             <span>
-              <b>清空方块，解锁地标</b>
-              炸掉本关全部彩色方块，即可解锁对应的三高炉、冷却塔或大跳台并过关。剩余数量实时显示，清空后地面会逐行亮起对应地标的像素图案。三关方块数为
-              34、42、50 块，对手的数量、速度、射程和放泡泡频率逐级提升。
+              <b>清空方块，再挑战守卫</b>
+              三关有 34、42、50 块方块。清空后守卫登场，给你 3
+              秒准备时间；用泡泡炸中它的身体，击败守卫后才会解锁地面的像素地标。
+              三关守卫分别有 4、7、12 格生命。
+            </span>
+          </p>
+          <p>
+            <ShieldAlert />
+            <span>
+              <b>看预警，躲重锤与扫射</b>
+              橙色叉号是即将受到攻击的地面，紫色是小怪召唤点。后两关的蒸汽喷口也会提前预警。冷却监工召唤
+              1 只小怪；钢铁怪兽每次召唤 2
+              只，半血后进入狂暴。普通泡泡和钢墙仍然决定你的逃生路线。
             </span>
           </p>
           <p>
@@ -187,7 +201,7 @@ export function LandmarkDialog({
           )}{' '}
           {index !== null && unlocked[index]
             ? '城市记忆已点亮'
-            : '炸完对应关卡的全部彩色方块，即可解锁地标。'}
+            : '清空对应关卡的方块并击败守卫，即可解锁地标。'}
         </p>
         <DialogClose className="secondary-button">返回园区</DialogClose>
       </DialogContent>
@@ -248,10 +262,16 @@ export function GameHUD({
             </>
           ) : (
             <div>
-              <span>巡逻精灵</span>
+              <span>{state.phase === 'clear' ? '巡逻精灵' : '召唤小怪'}</span>
               <b>
                 {state.players.filter((p: any) => p.ai && p.alive).length}
-                <small> / {state.players.length - 1}</small>
+                <small>
+                  {' '}
+                  /{' '}
+                  {state.phase === 'clear'
+                    ? LEVELS[state.level].enemies
+                    : LEVELS[state.level].boss.minionCap}
+                </small>
               </b>
             </div>
           )}
@@ -264,6 +284,41 @@ export function GameHUD({
           </button>
         </div>
       </div>
+      {state.mode === 'solo' && state.boss && state.boss.hp > 0 && (
+        <div
+          className={'boss-hud ' + (state.boss.phase === 2 ? 'enraged' : '')}
+        >
+          <div className="boss-heading">
+            <span>
+              <ShieldAlert size={18} /> {state.boss.name}
+            </span>
+            <b>
+              {state.boss.hp} / {state.boss.maxHP}
+            </b>
+          </div>
+          <progress
+            aria-label={`${state.boss.name}生命`}
+            value={state.boss.hp}
+            max={state.boss.maxHP}
+          />
+          <span className="boss-tactic">
+            {state.phase === 'awakening'
+              ? `准备迎战 · ${Math.ceil(state.boss.awake)} 秒`
+              : state.warnings.length
+                ? `${state.warnings[0].name} · ${Math.max(0.1, state.warnings[0].delay).toFixed(1)} 秒`
+                : state.boss.phase === 2
+                  ? '狂暴阶段 · 留意十字扫射与召唤点'
+                  : '绕开钢墙，用泡泡炸中守卫的身体'}
+          </span>
+        </div>
+      )}
+      {state.phase === 'awakening' && (
+        <div className="boss-arrival" role="status">
+          <span>方块已清空 · 守卫苏醒</span>
+          <b>{state.boss.name}</b>
+          <small>已返回安全角落，收集补给并准备迎战</small>
+        </div>
+      )}
       <div className="bottom-hud">
         <div className="mission">
           <span>{state.mode === 'solo' ? '当前目标' : '胜利条件'}</span>
@@ -274,7 +329,9 @@ export function GameHUD({
                 <Diamond size={17} />
                 {state.landmarkUnlocked
                   ? `${LEVELS[state.level].landmark}已解锁`
-                  : `炸完方块，解锁${LEVELS[state.level].landmark}`}
+                  : state.phase === 'clear'
+                    ? `清空${LEVELS[state.level].mapName}的方块`
+                    : `击败${LEVELS[state.level].boss.name}`}
               </>
             ) : (
               '存活到最后，赢得对决'
@@ -290,6 +347,15 @@ export function GameHUD({
                 value={state.initialBlocks - state.remainingBlocks}
                 max={state.initialBlocks || 1}
               />
+            </div>
+          )}
+          {state.mode === 'solo' && (
+            <div className="encounter-hint">
+              {state.phase === 'clear'
+                ? state.level > 0
+                  ? '橙色叉号将喷发，提前离开'
+                  : '清障后迎战炉芯守卫'
+                : '橙色：攻击预警 · 紫色：小怪召唤'}
             </div>
           )}
           <div className="player-stats">
@@ -321,6 +387,10 @@ export function Result({
   onHome: () => void;
 }) {
   const r = state.result;
+  if (r === 'complete')
+    return (
+      <CampaignVictory state={state} onRestart={onRetry} onHome={onHome} />
+    );
   const win = ['won', 'complete', 'p1', 'p2'].includes(r);
   const title =
     r === 'complete'
@@ -353,7 +423,7 @@ export function Result({
         <DialogTitle className="result-title">{title}</DialogTitle>
         <DialogDescription className="result-description">
           {r === 'won'
-            ? `${LEVELS[state.level].landmark}已在地面化作像素图案。继续挑战下一关。`
+            ? `${LEVELS[state.level].boss.name}已击败，${LEVELS[state.level].landmark}已点亮。下一关的守卫和地图更加危险。`
             : r === 'complete'
               ? '三处像素地标已全部解锁，脚下是雪飞天的城市记忆。'
               : r === 'draw'
@@ -389,6 +459,89 @@ export function Result({
         <button className="text-button" onClick={onHome}>
           <Home size={15} />
           返回园区
+        </button>
+      </DialogContent>
+    </Dialog>
+  );
+}
+export function CampaignVictory({
+  state,
+  onRestart,
+  onHome,
+}: {
+  state: any;
+  onRestart: () => void;
+  onHome: () => void;
+}) {
+  const totals = state.totals;
+  const minutes = Math.floor(totals.elapsed / 60),
+    seconds = Math.floor(totals.elapsed % 60);
+  return (
+    <Dialog open={true}>
+      <DialogContent className="victory-panel" showCloseButton={false}>
+        <div className="victory-confetti" aria-hidden="true">
+          {Array.from({ length: 36 }, (_, i) => (
+            <i
+              key={i}
+              style={{
+                left: `${(i * 37) % 100}%`,
+                background: ['#ffd477', '#70e5df', '#f287a3'][i % 3],
+                animationDelay: `${-(i % 9) * 0.57}s`,
+                animationDuration: `${4 + (i % 3)}s`,
+              }}
+            />
+          ))}
+        </div>
+        <div className="victory-medal">
+          <Trophy size={44} strokeWidth={1.4} />
+        </div>
+        <span className="victory-kicker">SHOUGANG · ALL CLEAR</span>
+        <DialogTitle className="victory-title">全关通关！</DialogTitle>
+        <DialogDescription className="victory-description">
+          钢铁怪兽已击败，首钢园重新亮起。
+          <br />
+          这场胜利，属于每一次漂亮的闪避。
+        </DialogDescription>
+        <div className="victory-landmarks">
+          {[Factory, Waves, Mountain].map((Icon, i) => (
+            <div key={i}>
+              <Icon size={28} strokeWidth={1.5} />
+              <b>{LANDMARKS[i].name}</b>
+              <span>
+                <Check size={12} /> 已解锁
+              </span>
+            </div>
+          ))}
+        </div>
+        <div className="victory-stats">
+          <div>
+            <b>{state.score.toLocaleString()}</b>
+            <span>本次挑战积分</span>
+          </div>
+          <div>
+            <b>{totals.bosses}</b>
+            <span>击败守卫</span>
+          </div>
+          <div>
+            <b>{totals.blocks}</b>
+            <span>清理方块</span>
+          </div>
+          <div>
+            <b>
+              {minutes}:{String(seconds).padStart(2, '0')}
+            </b>
+            <span>挑战用时</span>
+          </div>
+        </div>
+        <button
+          autoFocus
+          className="start-button victory-restart"
+          onClick={onRestart}
+        >
+          重新挑战三关 <RotateCcw size={18} />
+        </button>
+        <button className="text-button" onClick={onHome}>
+          <Home size={16} /> 返回首钢园
         </button>
       </DialogContent>
     </Dialog>

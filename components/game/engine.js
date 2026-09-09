@@ -1,14 +1,32 @@
+import {
+  shapeMap,
+  VENTS,
+  bossOccupies,
+  awakenBoss,
+  updateEncounter,
+  damageBoss,
+} from './encounters.js';
 export const WIDTH = 13,
   HEIGHT = 11;
 export const LEVELS = [
   {
     name: '炉火重燃',
     landmark: '三高炉',
-    subtitle: '清空高炉前的彩色方块，重新点亮炉火。',
+    subtitle: '穿过高炉巷道，清空方块后击败炉芯守卫。',
+    mapName: '高炉巷战',
+    boss: {
+      name: '炉芯守卫',
+      hp: 4,
+      attackGap: 5.2,
+      warning: 1.8,
+      summonGap: 0,
+      summonCount: 0,
+      minionCap: 0,
+    },
     difficulty: '初阶',
     blocks: 34,
     enemies: 1,
-    time: 260,
+    time: 310,
     enemySpeed: 0.29,
     enemyRange: 2,
     enemyCapacity: 1,
@@ -21,11 +39,21 @@ export const LEVELS = [
   {
     name: '冷却回路',
     landmark: '冷却塔',
-    subtitle: '打通冷却回路，让塔身重新亮起。',
+    subtitle: '绕过错位钢墙与蒸汽喷口，迎战会召唤小怪的冷却监工。',
+    mapName: '冷却迷阵',
+    boss: {
+      name: '冷却监工',
+      hp: 7,
+      attackGap: 4.3,
+      warning: 1.5,
+      summonGap: 12,
+      summonCount: 1,
+      minionCap: 2,
+    },
     difficulty: '进阶',
     blocks: 42,
     enemies: 2,
-    time: 240,
+    time: 290,
     enemySpeed: 0.23,
     enemyRange: 3,
     enemyCapacity: 2,
@@ -38,11 +66,21 @@ export const LEVELS = [
   {
     name: '飞向未来',
     landmark: '雪飞天',
-    subtitle: '炸开最后一片方块，让大跳台重新亮起。',
+    subtitle: '突破钢轨要塞，击败会狂暴和成群召唤小怪的钢铁怪兽。',
+    mapName: '钢轨要塞',
+    boss: {
+      name: '钢铁怪兽',
+      hp: 12,
+      attackGap: 3.5,
+      warning: 1.25,
+      summonGap: 9,
+      summonCount: 2,
+      minionCap: 4,
+    },
     difficulty: '挑战',
     blocks: 50,
     enemies: 3,
-    time: 220,
+    time: 270,
     enemySpeed: 0.18,
     enemyRange: 4,
     enemyCapacity: 3,
@@ -61,7 +99,13 @@ const DIRS = [
 ];
 const key = (x, z) => `${x},${z}`;
 export class BubbleGame {
-  constructor({ mode = 'solo', level = 0, seed = 2026, score = 0 } = {}) {
+  constructor({
+    mode = 'solo',
+    level = 0,
+    seed = 2026,
+    score = 0,
+    journey = { blocks: 0, bosses: 0, elapsed: 0 },
+  } = {}) {
     if (!['solo', 'duel'].includes(mode)) throw Error('Invalid mode');
     this.mode = mode;
     this.level = Math.max(0, Math.min(2, level));
@@ -71,6 +115,19 @@ export class BubbleGame {
     this.seed = seed >>> 0;
     this.serial = 0;
     this.score = score;
+    this.entryScore = score;
+    this.journey = { ...journey };
+    this.elapsed = 0;
+    this.phase = 'clear';
+    this.boss = null;
+    this.warnings = [];
+    this.ventClock = 12;
+    this.ventCycle = 0;
+    this.nextEnemyId = 100;
+    this.vents =
+      mode === 'solo' && this.level > 0
+        ? VENTS.slice(0, this.level === 1 ? 4 : 6)
+        : [];
     this.time = mode === 'solo' ? LEVELS[this.level].time : 120;
     this.status = 'playing';
     this.result = null;
@@ -93,6 +150,7 @@ export class BubbleGame {
           : 2,
       ),
     );
+    if (mode === 'solo') shapeMap(this.grid, this.level);
     const spawns = [
       [1, 1],
       [11, 9],
@@ -188,6 +246,7 @@ export class BubbleGame {
     return (
       this.grid[z]?.[x] === 0 &&
       !this.bombAt(x, z) &&
+      !bossOccupies(this.boss, x, z) &&
       (ignoreActors ||
         !this.players.some(
           (p) => p !== player && p.alive && p.x === x && p.z === z,
@@ -267,6 +326,8 @@ export class BubbleGame {
     for (const b of [...this.bombs, ...(extra ? [extra] : [])])
       for (const [x, z] of this.blastCells(b)) set.add(key(x, z));
     for (const b of this.blasts) set.add(key(b.x, b.z));
+    for (const w of this.warnings)
+      if (w.kind === 'attack') for (const [x, z] of w.cells) set.add(key(x, z));
     return set;
   }
   route(p, goal, forbidden = new Set(), extraBomb = null) {
@@ -382,27 +443,28 @@ export class BubbleGame {
     }
     if (
       this.mode === 'solo' &&
-      !this.landmarkUnlocked &&
+      this.phase === 'clear' &&
       this.destroyed > 0 &&
       this.remainingBlocks === 0
     ) {
-      this.landmarkUnlocked = true;
-      this.score += 300;
-      this.emit('unlock', {
-        level: this.level,
-        landmark: LEVELS[this.level].landmark,
-      });
+      awakenBoss(this);
     }
   }
   damage() {
     for (const p of this.players) {
       if (!p.alive || p.invincible > 0) continue;
-      if (this.blasts.some((b) => b.x === p.x && b.z === p.z)) {
+      if (
+        this.blasts.some(
+          (b) => b.x === p.x && b.z === p.z && !(p.ai && b.hazard),
+        )
+      ) {
         p.hp--;
         p.invincible = 1.5;
         if (p.hp <= 0) {
           p.alive = false;
           if (p.ai) this.score += 100;
+          if (p.minion && this.players[0].hp < 3 && this.random() < 0.35)
+            this.pickups.push({ id: this.id(), x: p.x, z: p.z, type: 'heart' });
           this.emit('eliminated', { player: p.id });
         } else this.emit('hurt', { player: p.id, hp: p.hp });
       }
@@ -416,6 +478,22 @@ export class BubbleGame {
   judge() {
     if (this.status !== 'playing') return;
     if (this.mode === 'solo') {
+      if (!this.players[0].alive) {
+        this.finish('lost');
+        return;
+      }
+      if (
+        !this.landmarkUnlocked &&
+        this.remainingBlocks === 0 &&
+        this.boss?.defeated
+      ) {
+        this.landmarkUnlocked = true;
+        this.score += 300;
+        this.emit('unlock', {
+          level: this.level,
+          landmark: LEVELS[this.level].landmark,
+        });
+      }
       if (this.landmarkUnlocked)
         this.finish(this.level === 2 ? 'complete' : 'won');
       else if (!this.players[0].alive) this.finish('lost');
@@ -431,6 +509,7 @@ export class BubbleGame {
     if (this.status !== 'playing' || this.paused) return;
     dt = Math.max(0, Math.min(dt, 0.1));
     this.time = Math.max(0, this.time - dt);
+    this.elapsed += dt;
     this.players.forEach((p) => {
       p.cooldown = Math.max(0, p.cooldown - dt);
       p.bombCooldown = Math.max(0, p.bombCooldown - dt);
@@ -440,7 +519,9 @@ export class BubbleGame {
     this.blasts = this.blasts.filter((b) => b.life > 0);
     this.bombs.forEach((b) => (b.fuse -= dt));
     for (const b of [...this.bombs]) if (b.fuse <= 0) this.explode(b);
+    updateEncounter(this, dt);
     this.damage();
+    damageBoss(this);
     for (const p of this.players) if (p.ai) this.ai(p, dt);
     this.damage();
     this.judge();
@@ -448,6 +529,21 @@ export class BubbleGame {
   snapshot() {
     return {
       mode: this.mode,
+      entryScore: this.entryScore,
+      journey: { ...this.journey },
+      phase: this.phase,
+      boss: this.boss ? { ...this.boss } : null,
+      warnings: this.warnings.map((w) => ({
+        ...w,
+        cells: w.cells.map((c) => [...c]),
+      })),
+      vents: this.vents.map((c) => [...c]),
+      elapsed: this.elapsed,
+      totals: {
+        blocks: this.journey.blocks + this.destroyed,
+        bosses: this.journey.bosses + (this.boss?.defeated ? 1 : 0),
+        elapsed: this.journey.elapsed + this.elapsed,
+      },
       level: this.level,
       width: this.width,
       height: this.height,

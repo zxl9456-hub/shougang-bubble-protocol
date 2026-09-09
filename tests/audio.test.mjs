@@ -147,11 +147,31 @@ test('placement, explosion, block break and unlock trigger separate sounds witho
   const audio = new ParkAudio();
   try {
     await audio.activate();
-    for (const type of ['bomb', 'explode', 'destroy', 'pickup', 'unlock']) {
+    for (const type of [
+      'bomb',
+      'explode',
+      'destroy',
+      'pickup',
+      'unlock',
+      'boss-awake',
+      'boss-rage',
+      'attack-warning',
+      'summon-warning',
+      'boss-attack',
+      'boss-hit',
+      'boss-defeated',
+      'summon',
+    ]) {
       const count = audio.context.voices.length;
       audio.play({ type });
       assert.ok(audio.context.voices.length > count, type);
     }
+    const beforeFinale = audio.context.voices.length;
+    audio.play({ type: 'finish', result: 'complete' });
+    assert(
+      audio.context.voices.length >= beforeFinale + 7,
+      'campaign victory has its own fanfare',
+    );
     const count = audio.context.voices.length;
     audio.play({ type: 'explode' });
     assert.equal(audio.context.voices.length, count);

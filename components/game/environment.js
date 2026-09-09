@@ -76,24 +76,25 @@ export function buildDistrict(scene, assets) {
     roughnessMap: maps.roughness,
     bumpMap: maps.bump,
     bumpScale: 0.035,
-    clearcoat: 1,
-    clearcoatRoughness: 0.13,
+    clearcoat: 0.55,
+    clearcoatRoughness: 0.3,
     metalness: 0.28,
     transparent: true,
-    opacity: 0.84,
+    opacity: 0.94,
   });
   const reflector = new Reflector(new T.PlaneGeometry(90, 70), {
     clipBias: 0.005,
     textureWidth: 1024,
     textureHeight: 1024,
-    color: 0x889b9c,
+    color: 0x465a65,
   });
   reflector.rotation.x = -Math.PI / 2;
   reflector.position.set(0, -0.07, -8);
   reflector.userData.excludeFromDepth = true;
   const updateReflection = reflector.onBeforeRender;
   reflector.onBeforeRender = function (renderer, world, camera, ...rest) {
-    if (!world.overrideMaterial) updateReflection.call(this, renderer, world, camera, ...rest);
+    if (!world.overrideMaterial)
+      updateReflection.call(this, renderer, world, camera, ...rest);
   };
   scene.add(reflector);
   const floor = new T.Mesh(new T.PlaneGeometry(90, 70), roadMat);
@@ -103,8 +104,15 @@ export function buildDistrict(scene, assets) {
   floor.userData.keepInDepth = true;
   scene.add(floor);
   // Small pavers keep the play area legible while the street runs through the district.
-  const paving = { roughness: 0.32, metalness: 0.32, clearcoat: 0.9, clearcoatRoughness: 0.16,
-    bumpMap: maps.bump, bumpScale: 0.015, roughnessMap: maps.roughness };
+  const paving = {
+    roughness: 0.32,
+    metalness: 0.32,
+    clearcoat: 0.9,
+    clearcoatRoughness: 0.16,
+    bumpMap: maps.bump,
+    bumpScale: 0.015,
+    roughnessMap: maps.roughness,
+  };
   const floorA = new T.MeshPhysicalMaterial({ ...paving, color: '#526466' }),
     floorB = new T.MeshPhysicalMaterial({ ...paving, color: '#46595c' });
   for (let z = 0; z < 11; z++)

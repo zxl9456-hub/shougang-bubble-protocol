@@ -1,18 +1,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { BubbleGame, LEVELS } from '../components/game/engine.js';
-test('every seed has exactly 34, 42, 50 blocks and a strictly harder map', () => {
+test('every seed has 34, 42, 50 blocks with three distinct steel layouts', () => {
   for (let seed = 0; seed < 100; seed++) {
     const games = [0, 1, 2].map((level) => new BubbleGame({ level, seed }));
     assert.deepEqual(
       games.map((g) => g.initialBlocks),
       [34, 42, 50],
     );
-    for (let i = 1; i < 3; i++)
-      for (let z = 0; z < 11; z++)
-        for (let x = 0; x < 13; x++)
-          if (games[i - 1].grid[z][x] === 2)
-            assert.equal(games[i].grid[z][x], 2);
+    const layouts = games.map((g) =>
+      JSON.stringify(g.grid.map((row) => row.map((c) => c === 1))),
+    );
+    assert.equal(new Set(layouts).size, 3);
+    assert.deepEqual(
+      games.map((g) => g.vents.length),
+      [0, 4, 6],
+    );
     assert.equal(new BubbleGame({ mode: 'duel', seed }).initialBlocks, 38);
   }
 });

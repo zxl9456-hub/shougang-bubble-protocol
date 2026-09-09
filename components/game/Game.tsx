@@ -79,7 +79,12 @@ export default function Game() {
     sound.current?.setPaused(value);
   }, []);
   const start = useCallback(
-    (chosenMode: string, chosenLevel: number, score = 0) => {
+    (
+      chosenMode: string,
+      chosenLevel: number,
+      score = 0,
+      journey = { blocks: 0, bosses: 0, elapsed: 0 },
+    ) => {
       if (!park.current) return;
       keys.current.clear();
       const game = new BubbleGame({
@@ -87,6 +92,7 @@ export default function Game() {
         level: chosenLevel,
         seed: Math.floor(Math.random() * 1e8),
         score,
+        journey,
       });
       engine.current = game;
       activeRef.current = true;
@@ -95,6 +101,7 @@ export default function Game() {
       setActive(true);
       setPaused(false);
       setToast('');
+      setResultVisible(false);
       setState(game.snapshot());
       setMode(chosenMode);
       setLevel(chosenLevel);
@@ -135,7 +142,11 @@ export default function Game() {
       toastTimer: any;
     try {
       const savedQuality = localStorage.getItem('shougang-render-quality-v5');
-      qualityRef.current = savedQuality === 'balanced' || (!savedQuality && window.innerWidth < 700) ? 'balanced' : 'high';
+      qualityRef.current =
+        savedQuality === 'balanced' ||
+        (!savedQuality && window.innerWidth < 700)
+          ? 'balanced'
+          : 'high';
       setQuality(qualityRef.current);
     } catch {}
     try {
@@ -163,7 +174,9 @@ export default function Game() {
           const { loadParkAssets } = await import('./assets.js');
           const assets = await loadParkAssets();
           if (stopped || !host.current) return;
-          park.current = new ParkScene(host.current, assets, { quality: qualityRef.current });
+          park.current = new ParkScene(host.current, assets, {
+            quality: qualityRef.current,
+          });
           park.current.reduced = matchMedia(
             '(prefers-reduced-motion: reduce)',
           ).matches;
@@ -215,9 +228,14 @@ export default function Game() {
                 p.unlocked[game.level] = true;
                 saveProgress(p);
                 park.current.celebrateLandmark(event.level);
-                setToast(`全部方块已清空 · 地面像素图已点亮`);
+                setToast(`守卫已击败 · 地面像素图已点亮`);
                 clearTimeout(toastTimer);
                 toastTimer = setTimeout(() => setToast(''), 3500);
+              }
+              if (event.type === 'boss-rage') {
+                setToast('钢铁怪兽进入狂暴！扫射与召唤加速');
+                clearTimeout(toastTimer);
+                toastTimer = setTimeout(() => setToast(''), 2800);
               }
               if (event.type === 'pickup' && event.player === 1) {
                 setToast(
@@ -341,6 +359,10 @@ export default function Game() {
           time: Math.ceil(engine.current?.time || 0),
           unlocked: progressRef.current.unlocked,
           remainingBlocks: engine.current?.remainingBlocks,
+          phase: engine.current?.phase,
+          boss: engine.current?.boss
+            ? { name: engine.current.boss.name, hp: engine.current.boss.hp }
+            : null,
         }),
       });
       register({
@@ -421,7 +443,9 @@ export default function Game() {
     qualityRef.current = next;
     setQuality(next);
     park.current?.setQuality(next);
-    try { localStorage.setItem('shougang-render-quality-v5', next); } catch {}
+    try {
+      localStorage.setItem('shougang-render-quality-v5', next);
+    } catch {}
   };
   return (
     <main className={'game-shell ' + (active ? 'in-match' : '')}>
@@ -447,7 +471,11 @@ export default function Game() {
             className="quality-toggle"
             onClick={toggleQuality}
             aria-label={`当前${quality === 'high' ? '高清' : '流畅'}画质，点击切换`}
-            title={quality === 'high' ? '高清：高分辨率、接触阴影、大厅景深' : '流畅：减少画面特效，保留全部玩法'}
+            title={
+              quality === 'high'
+                ? '高清：高分辨率、接触阴影、大厅景深'
+                : '流畅：减少画面特效，保留全部玩法'
+            }
           >
             <Sparkles size={17} />
             <span>{quality === 'high' ? '高清' : '流畅'}</span>
@@ -552,9 +580,12 @@ export default function Game() {
               </button>
               <p className="mode-description">
                 {mode === 'solo'
-                  ? `${LEVELS[level].difficulty} · ${LEVELS[level].blocks} 块方块 · ${LEVELS[level].enemies} 位对手`
+                  ? `${LEVELS[level].mapName} · ${LEVELS[level].blocks} 块方块 · BOSS ${LEVELS[level].boss.name}`
                   : '同一块键盘 · 两位玩家 · 一场泡泡对决'}
               </p>
+              {mode === 'solo' && (
+                <p className="challenge-tip">{LEVELS[level].subtitle}</p>
+              )}
               <div className="keyboard-hint">
                 <kbd>↑</kbd>
                 <div>
@@ -586,7 +617,7 @@ export default function Game() {
                   <b>{countdown}</b>
                   <span>
                     {mode === 'solo'
-                      ? '炸完彩色方块，解锁首钢地标'
+                      ? '清空方块 → 击败守卫 → 解锁地标'
                       : '准备好了吗？泡泡对决即将开始'}
                   </span>
                 </div>
@@ -612,9 +643,18 @@ export default function Game() {
               {state.status === 'finished' && resultVisible && (
                 <Result
                   state={state}
-                  onRetry={() => start(mode, level)}
+                  onRetry={() =>
+                    state.result === 'complete'
+                      ? start('solo', 0)
+                      : start(mode, level, state.entryScore, state.journey)
+                  }
                   onNext={() =>
-                    start('solo', Math.min(2, level + 1), state.score)
+                    start(
+                      'solo',
+                      Math.min(2, level + 1),
+                      state.score,
+                      state.totals,
+                    )
                   }
                   onHome={home}
                 />
@@ -686,7 +726,14 @@ export default function Game() {
           </button>
           <button
             className="secondary-button"
-            onClick={() => start(mode, level)}
+            onClick={() =>
+              start(
+                mode,
+                level,
+                engine.current?.entryScore,
+                engine.current?.journey,
+              )
+            }
           >
             <RotateCcw size={16} />
             重新开始

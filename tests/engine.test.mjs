@@ -85,7 +85,7 @@ test('solo player has three lives and receives temporary invulnerability', () =>
   assert.equal(g.players[0].hp, 2);
   assert.equal(g.players[0].alive, true);
 });
-test('last block unlocks the landmark without a core or eliminating robots', () => {
+test('last block begins a guardian encounter and does not grant an early victory', () => {
   const g = blank('solo');
   g.grid[3][3] = 2;
   g.grid[7][7] = 2;
@@ -101,14 +101,19 @@ test('last block unlocks the landmark without a core or eliminating robots', () 
   g.explode(final);
   g.judge();
   assert.equal(g.remainingBlocks, 0);
-  assert.equal(g.landmarkUnlocked, true);
-  assert.equal(g.players[1].alive, true);
-  assert.equal(g.result, 'won');
-  assert.equal(g.drainEvents().filter((e) => e.type === 'unlock').length, 1);
+  assert.equal(g.landmarkUnlocked, false);
+  assert.equal(g.players.length, 1);
+  assert.equal(g.phase, 'awakening');
+  assert.equal(g.boss.hp, LEVELS[0].boss.hp);
+  assert.equal(g.result, null);
+  assert.equal(
+    g.drainEvents().filter((e) => e.type === 'boss-awake').length,
+    1,
+  );
   g.judge();
   assert.equal(g.drainEvents().length, 0);
 });
-test('robot destruction counts and a cleared level wins even on a simultaneous final hit', () => {
+test('robot destruction counts and phase transition provides a safe arrival', () => {
   const g = blank('solo');
   g.grid[3][3] = 2;
   g.players[0].x = 3;
@@ -116,11 +121,14 @@ test('robot destruction counts and a cleared level wins even on a simultaneous f
   g.players[0].hp = 1;
   g.bombs = [{ id: 60, x: 3, z: 4, range: 2, owner: 2, fuse: 0 }];
   g.update(0.01);
-  assert.equal(g.players[0].alive, false);
-  assert.equal(g.result, 'won');
-  assert.equal(g.drainEvents().filter((e) => e.type === 'unlock').length, 1);
+  assert.equal(g.players[0].alive, true);
+  assert.equal(g.result, null);
+  assert.equal(g.phase, 'awakening');
+  assert.deepEqual([g.players[0].x, g.players[0].z], [1, 9]);
+  assert.equal(g.blasts.length, 0);
+  assert.equal(g.drainEvents().filter((e) => e.type === 'unlock').length, 0);
 });
-test('final block after a real 2.2 second fuse completes the final level', () => {
+test('real 2.2 second fuse triggers a guardian rather than skipping the final battle', () => {
   const g = blank('solo');
   g.level = 2;
   g.grid[1][3] = 2;
@@ -131,7 +139,8 @@ test('final block after a real 2.2 second fuse completes the final level', () =>
   assert.equal(g.landmarkUnlocked, false);
   advance(g, 0.3);
   assert.equal(g.grid[1][3], 0);
-  assert.equal(g.result, 'complete');
+  assert.equal(g.result, null);
+  assert.equal(g.phase, 'awakening');
   const h = blank('solo');
   h.grid[5][5] = 2;
   h.time = 0.01;
